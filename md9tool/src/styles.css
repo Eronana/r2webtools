@@ -1,0 +1,273 @@
+:root {
+  color-scheme: dark;
+  --bg: #111316;
+  --panel: #1b1f24;
+  --panel-2: #242a31;
+  --text: #edf1f5;
+  --muted: #9aa6b2;
+  --line: #333b45;
+  --accent: #54c6a6;
+  --warn: #e5b85b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+#viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+#viewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#panel {
+  height: 100%;
+  overflow: auto;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  padding: 14px;
+}
+
+.panel-block {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-block:first-child {
+  padding-top: 0;
+}
+
+label,
+.submesh-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+select,
+button,
+.file-button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+}
+
+select {
+  width: 100%;
+  padding: 0 10px;
+}
+
+.select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  gap: 8px;
+}
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-row span {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+button,
+.file-button {
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+button {
+  background: var(--accent);
+  color: #07110f;
+  border-color: transparent;
+  font-weight: 750;
+}
+
+button:disabled {
+  cursor: default;
+  background: #303841;
+  color: var(--muted);
+}
+
+.file-button input {
+  display: none;
+}
+
+.switches {
+  grid-template-columns: 1fr 1fr;
+}
+
+.switches label,
+.submesh-list label,
+.missing-list div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.stats {
+  gap: 6px;
+}
+
+.stats div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stats strong {
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.submesh-list {
+  display: grid;
+  gap: 4px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.submesh-list label {
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: #15191e;
+}
+
+.submesh-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.missing-block {
+  border-color: color-mix(in srgb, var(--warn), var(--line) 60%);
+}
+
+.missing-list {
+  display: grid;
+  gap: 5px;
+}
+
+.missing-list div {
+  min-height: 26px;
+  justify-content: space-between;
+  border-radius: 6px;
+  background: #211d15;
+  color: var(--warn);
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.missing-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#status {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  max-width: min(620px, calc(100vw - 360px));
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgb(15 18 21 / 88%);
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+#dropOverlay {
+  position: fixed;
+  inset: 12px;
+  display: none;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  background: rgb(6 14 13 / 72%);
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 750;
+  pointer-events: none;
+  z-index: 20;
+}
+
+#app.dragging #dropOverlay {
+  display: grid;
+}
+
+@media (max-width: 820px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) 290px;
+  }
+
+  #panel {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  #status {
+    max-width: calc(100vw - 28px);
+    bottom: 304px;
+  }
+}

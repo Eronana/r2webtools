@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MD9 Viewer</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main id="app">
+      <section id="viewport" aria-label="MD9 viewport"></section>
+      <aside id="panel">
+        <div class="panel-block">
+          <label class="file-button">
+            <input id="fileInput" type="file" accept=".md9,.ani,.dds,.png,.jpg,.jpeg,.webp" multiple />
+            打开 MD9 / ANI / 贴图
+          </label>
+          <label class="file-button">
+            <input id="folderInput" type="file" webkitdirectory multiple />
+            打开目录
+          </label>
+        </div>
+
+        <div class="panel-block">
+          <label for="modelSelect">当前模型</label>
+          <div class="select-row">
+            <select id="modelSelect" disabled>
+              <option value="">尚未加载 md9</option>
+            </select>
+            <button id="clearModels" type="button" disabled>清空</button>
+          </div>
+        </div>
+
+        <div class="panel-block">
+          <label for="animationSelect">当前动画</label>
+          <div class="select-row">
+            <select id="animationSelect" disabled>
+              <option value="">默认姿势</option>
+            </select>
+            <button id="clearAnimations" type="button" disabled>清空</button>
+          </div>
+        </div>
+
+        <div class="panel-block">
+          <label><input id="autoPlay" type="checkbox" checked /> 自动播放</label>
+          <div class="timeline-row">
+            <input id="animationFrame" type="range" min="0" max="1" value="0" step="0.1" disabled />
+            <span id="frameLabel">0 / 0</span>
+          </div>
+        </div>
+
+        <div id="missingBlock" class="panel-block missing-block">
+          <div class="submesh-title">缺失贴图</div>
+          <div id="missingTextures" class="missing-list"></div>
+        </div>
+
+        <div class="panel-block switches">
+          <label><input id="showTextures" type="checkbox" checked /> 贴图</label>
+          <label><input id="showWireframe" type="checkbox" /> 线框</label>
+          <label><input id="showSkeleton" type="checkbox" checked /> 骨骼</label>
+          <label><input id="showNormals" type="checkbox" /> 法线</label>
+          <label><input id="showBounds" type="checkbox" /> 包围盒</label>
+          <label><input id="showGrid" type="checkbox" checked /> 网格</label>
+        </div>
+
+        <div class="panel-block">
+          <label for="normalScale">法线长度</label>
+          <input id="normalScale" type="range" min="0.2" max="8" value="1.8" step="0.1" />
+        </div>
+
+        <div class="panel-block stats">
+          <div><span>文件</span><strong id="statFile">-</strong></div>
+          <div><span>材质</span><strong id="statMaterials">0</strong></div>
+          <div><span>部件</span><strong id="statSubmeshes">0</strong></div>
+          <div><span>顶点</span><strong id="statVertices">0</strong></div>
+          <div><span>面</span><strong id="statFaces">0</strong></div>
+        </div>
+
+        <div class="panel-block">
+          <div class="submesh-title">部件</div>
+          <div id="submeshList" class="submesh-list"></div>
+        </div>
+      </aside>
+      <div id="status">选择一个 md9 文件</div>
+      <div id="dropOverlay">拖入 md9 / ani / 贴图文件</div>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
