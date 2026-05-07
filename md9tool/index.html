@@ -122,7 +122,13 @@
             <select id="editParent"></select>
           </div>
 
-          <div class="submesh-title" data-i18n="transform">Transform</div>
+          <div class="transform-head">
+            <div class="submesh-title" data-i18n="transform">Transform</div>
+            <label class="switch-row">
+              <input id="matrixMode" type="checkbox" />
+              <span data-i18n="matrixMode">Matrix</span>
+            </label>
+          </div>
           <div id="transformEditor" class="transform-editor"></div>
 
           <label class="file-button">

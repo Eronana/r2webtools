@@ -42,6 +42,7 @@ const el = {
   deletePart: document.querySelector("#deletePart"),
   editMaterial: document.querySelector("#editMaterial"),
   editParent: document.querySelector("#editParent"),
+  matrixMode: document.querySelector("#matrixMode"),
   transformEditor: document.querySelector("#transformEditor"),
   replaceMeshInput: document.querySelector("#replaceMeshInput"),
   replaceHint: document.querySelector("#replaceHint"),
@@ -79,7 +80,7 @@ scene.add(grid);
 const ddsLoader = new DDSLoader();
 const textureLoader = new THREE.TextureLoader();
 const clock = new THREE.Clock();
-const ANIMATION_FPS = 60;
+const ANIMATION_FPS = 90;
 const I18N = {
   en: {
     openFiles: "Open MD9 / ANI / model / textures",
@@ -112,6 +113,7 @@ const I18N = {
     material: "Material",
     parentPart: "Parent",
     transform: "Transform",
+    matrixMode: "Matrix",
     replaceModel: "Replace OBJ / GLB / GLTF",
     replaceHint: "Drop obj/mtl or glb/gltf/bin with textures here",
     chooseMd9: "Choose an MD9 file",
@@ -190,6 +192,7 @@ const I18N = {
     material: "材质",
     parentPart: "父部件",
     transform: "变换",
+    matrixMode: "矩阵",
     replaceModel: "替换 OBJ / GLB / GLTF",
     replaceHint: "可把 obj/mtl 或 glb/gltf/bin 和贴图一起拖入页面",
     chooseMd9: "选择一个 md9 文件",
@@ -268,6 +271,7 @@ const I18N = {
     material: "Material",
     parentPart: "Padre",
     transform: "Transformacion",
+    matrixMode: "Matriz",
     replaceModel: "Reemplazar OBJ / GLB / GLTF",
     replaceHint: "Suelta obj/mtl o glb/gltf/bin con texturas aqui",
     chooseMd9: "Elige un archivo MD9",
@@ -376,6 +380,10 @@ el.clearPartMesh.addEventListener("click", clearEditedPartMesh);
 el.deletePart.addEventListener("click", deleteEditedPart);
 el.editMaterial.addEventListener("input", applyEditorValues);
 el.editParent.addEventListener("input", applyEditorValues);
+el.matrixMode.addEventListener("change", () => {
+  if (!state.currentModel || state.editIndex < 0) return;
+  buildTransformEditor(state.currentModel.submeshes[state.editIndex]);
+});
 el.replaceMeshInput.addEventListener("change", async () => {
   await replaceEditedPartFromFiles([...el.replaceMeshInput.files]);
   el.replaceMeshInput.value = "";
@@ -1469,6 +1477,10 @@ async function createAlphaPngTexture(sourceTexture) {
 
 function buildTransformEditor(part) {
   el.transformEditor.replaceChildren();
+  if (el.matrixMode.checked) {
+    buildMatrixEditor(part);
+    return;
+  }
   const transform = getPartTransform(part);
   for (const control of TRANSFORM_CONTROLS) {
     const row = document.createElement("div");
@@ -1480,6 +1492,25 @@ function buildTransformEditor(part) {
     row.append(label, range, number);
     el.transformEditor.append(row);
   }
+}
+
+function buildMatrixEditor(part) {
+  const grid = document.createElement("div");
+  grid.className = "matrix-editor";
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 4; col++) {
+      const index = col * 4 + row;
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = "0.0001";
+      input.value = formatNumber(part.matrix[index] ?? (row === col ? 1 : 0));
+      input.dataset.matrixIndex = String(index);
+      input.setAttribute("aria-label", `m${row}${col}`);
+      input.addEventListener("input", applyEditorValues);
+      grid.append(input);
+    }
+  }
+  el.transformEditor.append(grid);
 }
 
 function createTransformInput(type, control, transform) {
@@ -1514,7 +1545,7 @@ function applyEditorValues() {
     }
   }
 
-  part.matrix = transformInputsToMd9Matrix();
+  part.matrix = el.matrixMode.checked ? matrixInputsToMd9Matrix() : transformInputsToMd9Matrix();
 
   syncPartBone(part);
   updateModelDerivedData();
@@ -1541,6 +1572,18 @@ function transformInputsToMd9Matrix() {
   }
   const renderMatrix = new THREE.Matrix4().compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
   return renderMatrixToMd9Array(renderMatrix);
+}
+
+function matrixInputsToMd9Matrix() {
+  const matrix = new Array(16).fill(0);
+  matrix[0] = 1;
+  matrix[5] = 1;
+  matrix[10] = 1;
+  matrix[15] = 1;
+  for (const input of el.transformEditor.querySelectorAll("[data-matrix-index]")) {
+    matrix[Number(input.dataset.matrixIndex)] = Number(input.value) || 0;
+  }
+  return matrix;
 }
 
 function findRenderedMaterial(materialId, excludeIndex = -1) {
@@ -2081,34 +2124,128 @@ async function bakeReplacementTextures(replacement) {
 
 async function buildTextureAtlas(sources) {
   const prepared = [];
-  let width = 0;
-  let height = 0;
+  const uniqueSources = [];
+  const seen = new Map();
+  let totalArea = 0;
+  let maxSourceWidth = 0;
   for (const source of sources) {
     const image = await loadImageBitmapSource(source.file || source.image);
-    source.imageWidth = getImageWidth(image);
-    source.imageHeight = getImageHeight(image);
+    const imageWidth = getImageWidth(image);
+    const imageHeight = getImageHeight(image);
+    const fingerprint = createImageFingerprint(image, imageWidth, imageHeight);
+    const existing = findMatchingAtlasSource(seen.get(fingerprint.key), fingerprint);
+    if (existing) {
+      source.imageWidth = existing.imageWidth;
+      source.imageHeight = existing.imageHeight;
+      source.rect = existing.rect;
+      source.image = existing.image;
+      prepared.push(source);
+      continue;
+    }
+
+    source.imageWidth = imageWidth;
+    source.imageHeight = imageHeight;
     source.rect = {
-      x: width,
+      x: 0,
       y: 0,
-      w: source.imageWidth,
-      h: source.imageHeight
+      w: imageWidth,
+      h: imageHeight
     };
     source.image = image;
+    source.fingerprint = fingerprint;
+    if (!seen.has(fingerprint.key)) seen.set(fingerprint.key, []);
+    seen.get(fingerprint.key).push(source);
+    uniqueSources.push(source);
     prepared.push(source);
-    width += source.imageWidth;
-    height = Math.max(height, source.imageHeight);
+    totalArea += imageWidth * imageHeight;
+    maxSourceWidth = Math.max(maxSourceWidth, imageWidth);
   }
 
+  packAtlasSources(uniqueSources, totalArea, maxSourceWidth);
+  let width = 0;
+  let height = 0;
+  for (const source of uniqueSources) {
+    width = Math.max(width, source.rect.x + source.rect.w);
+    height = Math.max(height, source.rect.y + source.rect.h);
+  }
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, width);
   canvas.height = Math.max(1, height);
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { alpha: true });
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  for (const source of prepared) {
+  for (const source of uniqueSources) {
     ctx.drawImage(source.image, source.rect.x, source.rect.y, source.rect.w, source.rect.h);
   }
+  for (const source of prepared) delete source.fingerprint;
   return { canvas };
+}
+
+function createImageFingerprint(image, width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const ctx = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  return {
+    width,
+    height,
+    pixels,
+    key: `${width}x${height}:${hashBytes(pixels)}`
+  };
+}
+
+function findMatchingAtlasSource(candidates, fingerprint) {
+  if (!candidates) return null;
+  for (const source of candidates) {
+    const other = source.fingerprint;
+    if (!other || other.width !== fingerprint.width || other.height !== fingerprint.height) continue;
+    if (bytesEqual(other.pixels, fingerprint.pixels)) return source;
+  }
+  return null;
+}
+
+function packAtlasSources(sources, totalArea, maxSourceWidth) {
+  const targetWidth = Math.max(maxSourceWidth, Math.ceil(Math.sqrt(Math.max(1, totalArea))));
+  const sorted = [...sources].sort((a, b) => {
+    const heightDelta = b.imageHeight - a.imageHeight;
+    return heightDelta || b.imageWidth - a.imageWidth;
+  });
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  for (const source of sorted) {
+    if (x > 0 && x + source.imageWidth > targetWidth) {
+      y += rowHeight;
+      x = 0;
+      rowHeight = 0;
+    }
+    source.rect.x = x;
+    source.rect.y = y;
+    source.rect.w = source.imageWidth;
+    source.rect.h = source.imageHeight;
+    x += source.imageWidth;
+    rowHeight = Math.max(rowHeight, source.imageHeight);
+  }
+}
+
+function hashBytes(bytes) {
+  let hash = 2166136261;
+  for (let i = 0; i < bytes.length; i++) {
+    hash ^= bytes[i];
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+function bytesEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 function remapSourceUvToAtlas(source, u, v, atlasWidth, atlasHeight) {
@@ -2665,7 +2802,7 @@ async function saveCurrentModel() {
   const saveSnapshot = captureSaveMutationSnapshot(state.currentModel);
   try {
     await bakeReplacementAtlas(state.currentModel);
-    const md9 = serializeMd9(state.currentModel);
+    const md9 = serializeMd9(createBakedModelForSave(state.currentModel));
     const baseName = state.currentModel.name.split(/[\\/]/).pop().replace(/\.[^.]+$/, "") || "model";
     downloadBlob(new Blob([md9], { type: "application/octet-stream" }), `${baseName}_edited.md9`);
     setStatus(t("savedMd9", { name: `${baseName}_edited.md9` }));
@@ -2675,6 +2812,70 @@ async function saveCurrentModel() {
   } finally {
     restoreSaveMutationSnapshot(state.currentModel, saveSnapshot);
   }
+}
+
+function createBakedModelForSave(model) {
+  return {
+    ...model,
+    materials: model.materials.map((material) => ({
+      ...material,
+      diffuse: [...material.diffuse],
+      ambient: [...material.ambient],
+      specular: [...material.specular],
+      emissive: [...material.emissive],
+      extra: material.extra ? [...material.extra] : []
+    })),
+    submeshes: model.submeshes.map(createBakedPartForSave)
+  };
+}
+
+function createBakedPartForSave(part) {
+  const renderMatrix = md9ArrayToRenderMatrix(part.matrix);
+  const position = new THREE.Vector3();
+  const linearMatrix = renderMatrix.clone();
+  position.setFromMatrixPosition(renderMatrix);
+  linearMatrix.setPosition(0, 0, 0);
+
+  const bakedPositions = new Float32Array(part.localPositions.length);
+  const point = new THREE.Vector3();
+  const box = new THREE.Box3();
+  for (let i = 0; i < part.localPositions.length; i += 3) {
+    point.set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2]).applyMatrix4(linearMatrix);
+    bakedPositions[i] = point.x;
+    bakedPositions[i + 1] = point.y;
+    bakedPositions[i + 2] = point.z;
+    box.expandByPoint(point);
+  }
+
+  const normalMatrix = new THREE.Matrix3().getNormalMatrix(linearMatrix);
+  const bakedNormals = new Float32Array(part.normals.length);
+  const normal = new THREE.Vector3();
+  for (let i = 0; i < part.normals.length; i += 3) {
+    normal.set(part.normals[i], part.normals[i + 1], part.normals[i + 2]).applyMatrix3(normalMatrix).normalize();
+    bakedNormals[i] = normal.x;
+    bakedNormals[i + 1] = normal.y;
+    bakedNormals[i + 2] = normal.z;
+  }
+
+  const identityLinearMatrix = new THREE.Matrix4().makeTranslation(position.x, position.y, position.z);
+  return {
+    ...part,
+    matrix: renderMatrixToMd9Array(identityLinearMatrix),
+    boundingBox: box.isEmpty()
+      ? [0, 0, 0, 0, 0, 0]
+      : [
+          box.min.x,
+          box.min.y,
+          -box.max.z,
+          box.max.x,
+          box.max.y,
+          -box.min.z
+        ],
+    localPositions: bakedPositions,
+    normals: bakedNormals,
+    uvs: new Float32Array(part.uvs),
+    indices: new Uint16Array(part.indices)
+  };
 }
 
 function captureSaveMutationSnapshot(model) {

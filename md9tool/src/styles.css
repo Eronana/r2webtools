@@ -345,6 +345,21 @@ input[type="checkbox"] {
   color: var(--muted);
 }
 
+.transform-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.switch-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .transform-editor {
   display: grid;
   gap: 8px;
@@ -367,6 +382,19 @@ input[type="checkbox"] {
   height: 32px;
   padding: 0 6px;
   font-size: 12px;
+}
+
+.matrix-editor {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.matrix-editor input {
+  min-width: 0;
+  height: 32px;
+  padding: 0 4px;
+  font-size: 11px;
 }
 
 .transform-row input[type="range"] {
