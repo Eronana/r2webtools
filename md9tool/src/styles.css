@@ -53,14 +53,43 @@ body,
   font-weight: 800;
 }
 
-.help-button {
+.viewport-tools {
   position: absolute;
   top: 12px;
   left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   z-index: 5;
+}
+
+.help-button {
   background: rgb(36 42 49 / 86%);
   color: var(--text);
   border-color: var(--line);
+}
+
+.language-buttons {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgb(36 42 49 / 86%);
+}
+
+.language-buttons button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.language-buttons button.active {
+  background: var(--accent);
+  color: #07110f;
 }
 
 .help-dialog {

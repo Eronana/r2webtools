@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -17,43 +17,50 @@
   <body>
     <main id="app">
       <section id="viewport" aria-label="MD9 viewport">
-        <button id="helpButton" class="icon-button help-button" type="button" title="使用说明" aria-label="使用说明">?</button>
+        <div class="viewport-tools">
+          <button id="helpButton" class="icon-button help-button" type="button" title="Help" aria-label="Help">?</button>
+          <div id="languageButtons" class="language-buttons" role="group" aria-label="Language">
+            <button type="button" data-language="en" class="active">EN</button>
+            <button type="button" data-language="zh">ZH</button>
+            <button type="button" data-language="es">ES</button>
+          </div>
+        </div>
       </section>
       <aside id="panel">
         <div class="panel-block">
           <label class="file-button">
             <input id="fileInput" type="file" accept=".md9,.ani,.obj,.mtl,.glb,.gltf,.bin,.dds,.png,.jpg,.jpeg,.webp" multiple />
-            打开 MD9 / ANI / 模型 / 贴图
+            <span data-i18n="openFiles">Open MD9 / ANI / model / textures</span>
           </label>
           <label class="file-button">
             <input id="folderInput" type="file" webkitdirectory multiple />
-            打开目录
+            <span data-i18n="openFolder">Open folder</span>
           </label>
-          <button id="saveModel" type="button" disabled>保存 MD9</button>
+          <button id="saveModel" type="button" disabled data-i18n="saveMd9">Save MD9</button>
         </div>
 
         <div class="panel-block">
-          <label for="modelSelect">当前模型</label>
+          <label for="modelSelect" data-i18n="currentModel">Current model</label>
           <div class="select-row">
             <select id="modelSelect" disabled>
-              <option value="">尚未加载 md9</option>
+              <option value="" data-i18n="noMd9Loaded">No MD9 loaded</option>
             </select>
-            <button id="clearModels" type="button" disabled>清空</button>
+            <button id="clearModels" type="button" disabled data-i18n="clear">Clear</button>
           </div>
         </div>
 
         <div class="panel-block">
-          <label for="animationSelect">当前动画</label>
+          <label for="animationSelect" data-i18n="currentAnimation">Current animation</label>
           <div class="select-row">
             <select id="animationSelect" disabled>
-              <option value="">默认姿势</option>
+              <option value="" data-i18n="defaultPose">Default pose</option>
             </select>
-            <button id="clearAnimations" type="button" disabled>清空</button>
+            <button id="clearAnimations" type="button" disabled data-i18n="clear">Clear</button>
           </div>
         </div>
 
         <div class="panel-block">
-          <label><input id="autoPlay" type="checkbox" checked /> 自动播放</label>
+          <label><input id="autoPlay" type="checkbox" checked /> <span data-i18n="autoPlay">Auto play</span></label>
           <div class="timeline-row">
             <input id="animationFrame" type="range" min="0" max="1" value="0" step="0.1" disabled />
             <span id="frameLabel">0 / 0</span>
@@ -61,36 +68,36 @@
         </div>
 
         <div id="missingBlock" class="panel-block missing-block">
-          <div class="submesh-title">缺失贴图</div>
+          <div class="submesh-title" data-i18n="missingTextures">Missing textures</div>
           <div id="missingTextures" class="missing-list"></div>
         </div>
 
         <div class="panel-block switches">
-          <label><input id="showTextures" type="checkbox" checked /> 贴图</label>
-          <label><input id="showWireframe" type="checkbox" /> 线框</label>
-          <label><input id="showSkeleton" type="checkbox" checked /> 骨骼</label>
-          <label><input id="showNormals" type="checkbox" /> 法线</label>
-          <label><input id="showBounds" type="checkbox" /> 包围盒</label>
-          <label><input id="showGrid" type="checkbox" checked /> 网格</label>
+          <label><input id="showTextures" type="checkbox" checked /> <span data-i18n="textures">Textures</span></label>
+          <label><input id="showWireframe" type="checkbox" /> <span data-i18n="wireframe">Wireframe</span></label>
+          <label><input id="showSkeleton" type="checkbox" checked /> <span data-i18n="skeleton">Skeleton</span></label>
+          <label><input id="showNormals" type="checkbox" /> <span data-i18n="normals">Normals</span></label>
+          <label><input id="showBounds" type="checkbox" /> <span data-i18n="bounds">Bounds</span></label>
+          <label><input id="showGrid" type="checkbox" checked /> <span data-i18n="grid">Grid</span></label>
         </div>
 
         <div class="panel-block">
-          <label for="normalScale">法线长度</label>
+          <label for="normalScale" data-i18n="normalLength">Normal length</label>
           <input id="normalScale" type="range" min="0.2" max="8" value="1.8" step="0.1" />
         </div>
 
         <div class="panel-block stats">
-          <div><span>文件</span><strong id="statFile">-</strong></div>
-          <div><span>材质</span><strong id="statMaterials">0</strong></div>
-          <div><span>部件</span><strong id="statSubmeshes">0</strong></div>
-          <div><span>顶点</span><strong id="statVertices">0</strong></div>
-          <div><span>面</span><strong id="statFaces">0</strong></div>
+          <div><span data-i18n="file">File</span><strong id="statFile">-</strong></div>
+          <div><span data-i18n="materials">Materials</span><strong id="statMaterials">0</strong></div>
+          <div><span data-i18n="parts">Parts</span><strong id="statSubmeshes">0</strong></div>
+          <div><span data-i18n="vertices">Vertices</span><strong id="statVertices">0</strong></div>
+          <div><span data-i18n="faces">Faces</span><strong id="statFaces">0</strong></div>
         </div>
 
         <div class="panel-block">
           <div class="submesh-head">
-            <div class="submesh-title">部件</div>
-            <button id="exportSelectedParts" type="button" disabled>导出选中</button>
+            <div class="submesh-title" data-i18n="parts">Parts</div>
+            <button id="exportSelectedParts" type="button" disabled data-i18n="exportSelected">Export selected</button>
           </div>
           <div id="submeshList" class="submesh-list"></div>
         </div>
@@ -98,41 +105,41 @@
         <div id="editorBlock" class="panel-block editor-block" hidden>
           <div class="editor-head">
             <div>
-              <div class="submesh-title">编辑部件</div>
+              <div class="submesh-title" data-i18n="editPart">Edit part</div>
               <strong id="editorName">-</strong>
             </div>
-            <button id="restorePart" type="button">还原</button>
+            <button id="restorePart" type="button" data-i18n="restore">Restore</button>
           </div>
           <div class="editor-actions">
-            <button id="clearPartMesh" type="button">清空 Mesh</button>
-            <button id="deletePart" type="button">删除部件</button>
+            <button id="clearPartMesh" type="button" data-i18n="clearMesh">Clear Mesh</button>
+            <button id="deletePart" type="button" data-i18n="deletePart">Delete part</button>
           </div>
 
           <div class="edit-grid">
-            <label for="editMaterial">材质</label>
+            <label for="editMaterial" data-i18n="material">Material</label>
             <select id="editMaterial"></select>
-            <label for="editParent">父部件</label>
+            <label for="editParent" data-i18n="parentPart">Parent</label>
             <select id="editParent"></select>
           </div>
 
-          <div class="submesh-title">变换</div>
+          <div class="submesh-title" data-i18n="transform">Transform</div>
           <div id="transformEditor" class="transform-editor"></div>
 
           <label class="file-button">
             <input id="replaceMeshInput" type="file" accept=".obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.dds" multiple />
-            替换 OBJ / GLB / GLTF
+            <span data-i18n="replaceModel">Replace OBJ / GLB / GLTF</span>
           </label>
-          <small id="replaceHint">可把 obj/mtl 或 glb/gltf/bin 和贴图一起拖入页面</small>
+          <small id="replaceHint" data-i18n="replaceHint">Drop obj/mtl or glb/gltf/bin with textures here</small>
         </div>
       </aside>
-      <div id="status">选择一个 md9 文件</div>
-      <div id="dropOverlay">拖入 md9 / ani / obj / glb / gltf / 贴图文件</div>
+      <div id="status" data-i18n="chooseMd9">Choose an MD9 file</div>
+      <div id="dropOverlay" data-i18n="dropOverlay">Drop md9 / ani / obj / glb / gltf / texture files</div>
       <dialog id="helpDialog" class="help-dialog">
         <div class="help-dialog-head">
-          <strong>使用说明</strong>
-          <button id="helpClose" class="icon-button" type="button" aria-label="关闭">×</button>
+          <strong data-i18n="helpTitle">Help</strong>
+          <button id="helpClose" class="icon-button" type="button" aria-label="Close">×</button>
         </div>
-        <pre id="helpContent">加载中...</pre>
+        <pre id="helpContent">Loading...</pre>
       </dialog>
     </main>
     <script type="module" src="./src/main.js"></script>

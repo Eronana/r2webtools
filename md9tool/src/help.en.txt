@@ -1,0 +1,24 @@
+MD9 Tool Help
+
+1. Open files
+   - Open individual files or a whole folder.
+   - You can drop md9, ani, obj, glb, gltf, bin, and common texture files.
+
+2. View
+   - Left mouse button rotates, mouse wheel zooms, right mouse button pans.
+   - The panel can toggle textures, wireframe, skeleton, normals, bounds, and grid.
+
+3. Edit parts
+   - Click Edit in the part list.
+   - You can change parent, material, position, rotation, and scale.
+   - You can replace the mesh with OBJ / GLB / GLTF.
+   - You can restore, clear mesh, or delete a part.
+
+4. Export
+   - Export on a part row exports that part as GLB.
+   - Export selected exports all checked parts as one GLB.
+
+5. Save MD9
+   - New textures are downloaded first.
+   - Then enter the texture filename that should be written into the MD9.
+   - Finally the edited MD9 is downloaded.

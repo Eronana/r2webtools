@@ -13,6 +13,7 @@ const el = {
   helpDialog: document.querySelector("#helpDialog"),
   helpClose: document.querySelector("#helpClose"),
   helpContent: document.querySelector("#helpContent"),
+  languageButtons: document.querySelector("#languageButtons"),
   fileInput: document.querySelector("#fileInput"),
   folderInput: document.querySelector("#folderInput"),
   saveModel: document.querySelector("#saveModel"),
@@ -79,6 +80,242 @@ const ddsLoader = new DDSLoader();
 const textureLoader = new THREE.TextureLoader();
 const clock = new THREE.Clock();
 const ANIMATION_FPS = 60;
+const I18N = {
+  en: {
+    openFiles: "Open MD9 / ANI / model / textures",
+    openFolder: "Open folder",
+    saveMd9: "Save MD9",
+    currentModel: "Current model",
+    noMd9Loaded: "No MD9 loaded",
+    clear: "Clear",
+    currentAnimation: "Current animation",
+    defaultPose: "Default pose",
+    autoPlay: "Auto play",
+    missingTextures: "Missing textures",
+    textures: "Textures",
+    wireframe: "Wireframe",
+    skeleton: "Skeleton",
+    normals: "Normals",
+    bounds: "Bounds",
+    grid: "Grid",
+    normalLength: "Normal length",
+    file: "File",
+    materials: "Materials",
+    parts: "Parts",
+    vertices: "Vertices",
+    faces: "Faces",
+    exportSelected: "Export selected",
+    editPart: "Edit part",
+    restore: "Restore",
+    clearMesh: "Clear Mesh",
+    deletePart: "Delete part",
+    material: "Material",
+    parentPart: "Parent",
+    transform: "Transform",
+    replaceModel: "Replace OBJ / GLB / GLTF",
+    replaceHint: "Drop obj/mtl or glb/gltf/bin with textures here",
+    chooseMd9: "Choose an MD9 file",
+    dropOverlay: "Drop md9 / ani / obj / glb / gltf / texture files",
+    helpTitle: "Help",
+    loading: "Loading...",
+    edit: "Edit",
+    export: "Export",
+    noTexture: "No texture",
+    rootNode: "Root",
+    noSelectedParts: "No selected parts to export",
+    exported: "Exported {name}",
+    exportFailed: "GLB export failed: {message}",
+    updatedPart: "Updated part {name}",
+    restoredPart: "Restored part {name}",
+    clearedMesh: "Cleared part {name} with a tiny triangle",
+    cannotDeleteLast: "Cannot delete the last part",
+    deletedPart: "Deleted part {name}",
+    selectPartFirst: "Click a part's Edit button first",
+    replacementNeedsModel: "Replacement needs an obj, glb, or gltf file",
+    replacementNoMesh: "Replacement failed: no usable mesh in the model",
+    replacementTooLarge: "Replacement failed: one part has more than 65535 vertices",
+    replacedPart: "Replaced part {name}{mtl}",
+    readMtl: ", read MTL",
+    addedTextures: "Added {count} texture files",
+    noSupportedFiles: "No usable md9, ani, or texture files",
+    loadingModel: "Loading {name}",
+    loadFailed: "Load failed: {name}",
+    switchedDefaultPose: "Switched to default pose",
+    animationLoaded: "Loaded animation {name}",
+    animationLoadFailed: "Animation load failed: {name}",
+    modelLoaded: "Loaded {name}",
+    md9CountMismatch: "MD9 vertex or index count mismatch",
+    aniLengthMismatch: "ANI data length mismatch",
+    modelsCleared: "Models cleared",
+    animationsCleared: "Animations cleared",
+    noModelLoaded: "No model loaded",
+    texturesComplete: "All texture files are present",
+    dropOrOpen: "Drop or open",
+    savedMd9: "Saved {name}",
+    saveFailed: "Save failed: {message}",
+    pngEncodeFailed: "PNG atlas encoding failed",
+    textureNamePrompt: "Enter the texture filename to write into the MD9",
+    cannotReadTexture: "Cannot read replacement texture",
+    ddsPngUnsupported: "PNG atlas saving cannot re-encode DDS in this version. Use png/jpg/webp for replacement mesh textures.",
+    helpLoadFailed: "Failed to load help: {message}"
+  },
+  zh: {
+    openFiles: "打开 MD9 / ANI / 模型 / 贴图",
+    openFolder: "打开目录",
+    saveMd9: "保存 MD9",
+    currentModel: "当前模型",
+    noMd9Loaded: "尚未加载 md9",
+    clear: "清空",
+    currentAnimation: "当前动画",
+    defaultPose: "默认姿势",
+    autoPlay: "自动播放",
+    missingTextures: "缺失贴图",
+    textures: "贴图",
+    wireframe: "线框",
+    skeleton: "骨骼",
+    normals: "法线",
+    bounds: "包围盒",
+    grid: "网格",
+    normalLength: "法线长度",
+    file: "文件",
+    materials: "材质",
+    parts: "部件",
+    vertices: "顶点",
+    faces: "面",
+    exportSelected: "导出选中",
+    editPart: "编辑部件",
+    restore: "还原",
+    clearMesh: "清空 Mesh",
+    deletePart: "删除部件",
+    material: "材质",
+    parentPart: "父部件",
+    transform: "变换",
+    replaceModel: "替换 OBJ / GLB / GLTF",
+    replaceHint: "可把 obj/mtl 或 glb/gltf/bin 和贴图一起拖入页面",
+    chooseMd9: "选择一个 md9 文件",
+    dropOverlay: "拖入 md9 / ani / obj / glb / gltf / 贴图文件",
+    helpTitle: "使用说明",
+    loading: "加载中...",
+    edit: "编辑",
+    export: "导出",
+    noTexture: "无贴图",
+    rootNode: "根节点",
+    noSelectedParts: "没有选中的部件可导出",
+    exported: "已导出 {name}",
+    exportFailed: "导出 GLB 失败: {message}",
+    updatedPart: "已更新部件 {name}",
+    restoredPart: "已还原部件 {name}",
+    clearedMesh: "已用极小三角形清空部件 {name}",
+    cannotDeleteLast: "不能删除最后一个部件",
+    deletedPart: "已删除部件 {name}",
+    selectPartFirst: "请先点击某个部件的编辑按钮",
+    replacementNeedsModel: "替换部件需要 obj、glb 或 gltf 文件",
+    replacementNoMesh: "替换失败: 模型中没有可用 mesh",
+    replacementTooLarge: "替换失败: 单个部件顶点数超过 65535",
+    replacedPart: "已替换部件 {name}{mtl}",
+    readMtl: "，已读取 MTL",
+    addedTextures: "已加入 {count} 个贴图文件",
+    noSupportedFiles: "没有可用的 md9、ani 或贴图文件",
+    loadingModel: "加载 {name}",
+    loadFailed: "加载失败: {name}",
+    switchedDefaultPose: "已切换到默认姿势",
+    animationLoaded: "已加载动画 {name}",
+    animationLoadFailed: "动画加载失败: {name}",
+    modelLoaded: "已加载 {name}",
+    md9CountMismatch: "MD9 顶点或索引计数不一致",
+    aniLengthMismatch: "ANI 数据长度不匹配",
+    modelsCleared: "已清空模型",
+    animationsCleared: "已清空动画",
+    noModelLoaded: "尚未加载模型",
+    texturesComplete: "贴图文件完整",
+    dropOrOpen: "拖入或打开",
+    savedMd9: "已保存 {name}",
+    saveFailed: "保存失败: {message}",
+    pngEncodeFailed: "PNG atlas 编码失败",
+    textureNamePrompt: "请输入该贴图写入 MD9 的文件名",
+    cannotReadTexture: "无法读取替换贴图",
+    ddsPngUnsupported: "第一版保存 PNG atlas 不支持把 DDS 重新编码进 PNG，请为替换 mesh 使用 png/jpg/webp 贴图",
+    helpLoadFailed: "使用说明加载失败: {message}"
+  },
+  es: {
+    openFiles: "Abrir MD9 / ANI / modelo / texturas",
+    openFolder: "Abrir carpeta",
+    saveMd9: "Guardar MD9",
+    currentModel: "Modelo actual",
+    noMd9Loaded: "No hay MD9 cargado",
+    clear: "Limpiar",
+    currentAnimation: "Animacion actual",
+    defaultPose: "Pose predeterminada",
+    autoPlay: "Reproduccion automatica",
+    missingTextures: "Texturas faltantes",
+    textures: "Texturas",
+    wireframe: "Malla",
+    skeleton: "Esqueleto",
+    normals: "Normales",
+    bounds: "Caja",
+    grid: "Cuadricula",
+    normalLength: "Longitud de normales",
+    file: "Archivo",
+    materials: "Materiales",
+    parts: "Partes",
+    vertices: "Vertices",
+    faces: "Caras",
+    exportSelected: "Exportar seleccion",
+    editPart: "Editar parte",
+    restore: "Restaurar",
+    clearMesh: "Limpiar Mesh",
+    deletePart: "Eliminar parte",
+    material: "Material",
+    parentPart: "Padre",
+    transform: "Transformacion",
+    replaceModel: "Reemplazar OBJ / GLB / GLTF",
+    replaceHint: "Suelta obj/mtl o glb/gltf/bin con texturas aqui",
+    chooseMd9: "Elige un archivo MD9",
+    dropOverlay: "Suelta archivos md9 / ani / obj / glb / gltf / texturas",
+    helpTitle: "Ayuda",
+    loading: "Cargando...",
+    edit: "Editar",
+    export: "Exportar",
+    noTexture: "Sin textura",
+    rootNode: "Raiz",
+    noSelectedParts: "No hay partes seleccionadas para exportar",
+    exported: "Exportado {name}",
+    exportFailed: "Error al exportar GLB: {message}",
+    updatedPart: "Parte actualizada {name}",
+    restoredPart: "Parte restaurada {name}",
+    clearedMesh: "Parte {name} limpiada con un triangulo diminuto",
+    cannotDeleteLast: "No se puede eliminar la ultima parte",
+    deletedPart: "Parte eliminada {name}",
+    selectPartFirst: "Primero haz clic en Editar en una parte",
+    replacementNeedsModel: "El reemplazo necesita un archivo obj, glb o gltf",
+    replacementNoMesh: "Fallo el reemplazo: el modelo no tiene mesh usable",
+    replacementTooLarge: "Fallo el reemplazo: una parte supera 65535 vertices",
+    replacedPart: "Parte reemplazada {name}{mtl}",
+    readMtl: ", MTL leido",
+    addedTextures: "Se agregaron {count} texturas",
+    noSupportedFiles: "No hay archivos md9, ani o texturas utilizables",
+    loadingModel: "Cargando {name}",
+    loadFailed: "Fallo la carga: {name}",
+    switchedDefaultPose: "Cambiado a pose predeterminada",
+    animationLoaded: "Animacion cargada {name}",
+    animationLoadFailed: "Fallo al cargar animacion: {name}",
+    modelLoaded: "Cargado {name}",
+    md9CountMismatch: "Conteo de vertices o indices MD9 inconsistente",
+    aniLengthMismatch: "Longitud de datos ANI no coincide",
+    modelsCleared: "Modelos limpiados",
+    animationsCleared: "Animaciones limpiadas",
+    noModelLoaded: "No hay modelo cargado",
+    texturesComplete: "Todas las texturas estan presentes",
+    dropOrOpen: "Soltar o abrir",
+    savedMd9: "Guardado {name}",
+    saveFailed: "Error al guardar: {message}",
+    pngEncodeFailed: "Error al codificar PNG atlas",
+    textureNamePrompt: "Introduce el nombre de textura para escribir en MD9",
+    cannotReadTexture: "No se puede leer la textura de reemplazo",
+    ddsPngUnsupported: "Esta version no puede recodificar DDS en el atlas PNG. Usa png/jpg/webp para texturas de reemplazo.",
+    helpLoadFailed: "Error al cargar ayuda: {message}"
+  }
+};
 const FLIP_Z_MATRIX = new THREE.Matrix4().makeScale(1, 1, -1);
 const TRANSFORM_CONTROLS = [
   { label: "X", transform: "position", axis: "x", min: -500, max: 500, step: 0.1 },
@@ -92,6 +329,7 @@ const TRANSFORM_CONTROLS = [
   { label: "SZ", transform: "scale", axis: "z", min: 0.01, max: 10, step: 0.01 }
 ];
 const state = {
+  language: "en",
   md9Files: [],
   aniFiles: [],
   root: null,
@@ -119,6 +357,10 @@ el.fileInput.addEventListener("change", () => {
 });
 el.helpButton.addEventListener("click", showHelpDialog);
 el.helpClose.addEventListener("click", () => el.helpDialog.close());
+el.languageButtons.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-language]");
+  if (button) setLanguage(button.dataset.language);
+});
 el.folderInput.addEventListener("change", () => {
   addFiles([...el.folderInput.files]);
   el.folderInput.value = "";
@@ -174,7 +416,49 @@ resizeObserver.observe(el.viewport);
 window.addEventListener("resize", resize);
 installDropHandlers();
 resize();
+setLanguage(detectInitialLanguage());
 animate();
+
+function t(key, values = {}) {
+  const template = I18N[state.language]?.[key] || I18N.en[key] || key;
+  return template.replace(/\{(\w+)\}/g, (_, name) => values[name] ?? "");
+}
+
+function detectInitialLanguage() {
+  const languages = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const language of languages) {
+    const base = String(language || "").toLowerCase().split("-")[0];
+    if (I18N[base]) return base;
+  }
+  return "en";
+}
+
+function setLanguage(language) {
+  state.language = I18N[language] ? language : "en";
+  document.documentElement.lang = state.language === "zh" ? "zh-CN" : state.language;
+  for (const button of el.languageButtons.querySelectorAll("[data-language]")) {
+    const active = button.dataset.language === state.language;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+  for (const node of document.querySelectorAll("[data-i18n]")) {
+    node.textContent = t(node.dataset.i18n);
+  }
+  el.helpButton.title = t("helpTitle");
+  el.helpButton.setAttribute("aria-label", t("helpTitle"));
+  el.helpClose.setAttribute("aria-label", state.language === "es" ? "Cerrar" : state.language === "zh" ? "关闭" : "Close");
+  if (!state.currentModel) setStatus(t("chooseMd9"));
+  updateModelSelect();
+  updateAnimationSelect();
+  if (state.currentModel) {
+    populateSubmeshList(state.currentModel);
+    updateMissingTextures(state.currentModel);
+    if (state.editIndex >= 0) openPartEditor(state.editIndex);
+  } else {
+    updateMissingTextures(null);
+  }
+  if (el.helpDialog.open) showHelpDialog();
+}
 
 async function addFiles(files) {
   const md9Files = files.filter((file) => file.name.toLowerCase().endsWith(".md9"));
@@ -216,9 +500,9 @@ async function addFiles(files) {
     await loadSelectedModel(state.currentMd9Id);
   } else if (textureFiles.length > 0) {
     updateMissingTextures(state.currentModel);
-    setStatus(`已加入 ${textureFiles.length} 个贴图文件`);
+    setStatus(t("addedTextures", { count: textureFiles.length }));
   } else {
-    setStatus("没有可用的 md9、ani 或贴图文件");
+    setStatus(t("noSupportedFiles"));
   }
 }
 
@@ -285,14 +569,14 @@ async function loadSelectedModel(id) {
   if (!item) return;
   state.currentMd9Id = id;
   el.modelSelect.value = id;
-  setStatus(`加载 ${item.label}`);
+  setStatus(t("loadingModel", { name: item.label }));
   try {
     const model = parseMd9(await item.file.arrayBuffer(), item.label, "");
     await showModel(model, item.label);
     if (state.currentAnimation) applyAnimation(0);
   } catch (error) {
     console.error(error);
-    setStatus(`加载失败: ${item.label}`);
+    setStatus(t("loadFailed", { name: item.label }));
   }
 }
 
@@ -304,7 +588,7 @@ async function loadSelectedAnimation(id) {
     el.animationSelect.value = "";
     resetPose();
     updateFrameControls();
-    setStatus("已切换到默认姿势");
+    setStatus(t("switchedDefaultPose"));
     return;
   }
   const item = state.aniFiles.find((candidate) => candidate.id === id);
@@ -312,15 +596,16 @@ async function loadSelectedAnimation(id) {
   state.currentAniId = id;
   el.animationSelect.value = id;
   try {
-    state.currentAnimation = parseAni(await item.file.arrayBuffer(), item.label);
+    if (!item.animation) item.animation = parseAni(await item.file.arrayBuffer(), item.label);
+    state.currentAnimation = item.animation;
     state.animationStartTime = getNow();
     state.animationFrame = 0;
     applyAnimation(0);
     updateFrameControls();
-    setStatus(`已加载动画 ${item.label}`);
+    setStatus(t("animationLoaded", { name: item.label }));
   } catch (error) {
     console.error(error);
-    setStatus(`动画加载失败: ${item.label}`);
+    setStatus(t("animationLoadFailed", { name: item.label }));
   }
 }
 
@@ -366,7 +651,7 @@ async function showModel(model, label) {
   frameModel(model.bounds);
   applyOptions();
   updateMissingTextures(model);
-  setStatus(`已加载 ${label}`);
+  setStatus(t("modelLoaded", { name: label }));
 }
 
 function parseMd9(buffer, name, baseDir) {
@@ -499,7 +784,7 @@ function parseMd9(buffer, name, baseDir) {
   }
 
   if (vertexCursor !== totalVertices || indexCursor !== allIndices.length) {
-    throw new Error("MD9 顶点或索引计数不一致");
+    throw new Error(t("md9CountMismatch"));
   }
 
   const model = { name, baseDir, newFormat, materials, submeshes, totalVertices, totalFaces, bounds };
@@ -583,7 +868,7 @@ function parseAni(buffer, name) {
     tracks.set(boneName, { boneName, positions, rotations, unknown });
   }
   if (offset !== buffer.byteLength) {
-    throw new Error("ANI 数据长度不匹配");
+    throw new Error(t("aniLengthMismatch"));
   }
   return { name, duration, tracks };
 }
@@ -616,6 +901,7 @@ async function createMaterial(material, baseDir) {
       texture.wrapT = THREE.RepeatWrapping;
       threeMaterial.map = texture;
       threeMaterial.color.set(0xffffff);
+      applyTextureAlphaToMaterial(threeMaterial, texture);
       threeMaterial.needsUpdate = true;
     } catch (error) {
       console.warn(`Texture load failed: ${material.textureName}`, error);
@@ -624,12 +910,230 @@ async function createMaterial(material, baseDir) {
   return threeMaterial;
 }
 
-function loadTexture(url, textureName) {
-  if (textureName.toLowerCase().endsWith(".dds")) return ddsLoader.loadAsync(url);
+async function loadTexture(url, textureName) {
+  if (textureName.toLowerCase().endsWith(".dds")) return loadDdsAsCanvasTexture(url, textureName);
   return textureLoader.loadAsync(url).then((texture) => {
     texture.flipY = false;
     return texture;
   });
+}
+
+function applyTextureAlphaToMaterial(material, texture) {
+  if (!texture?.userData?.hasAlpha) return;
+  material.transparent = true;
+  material.alphaTest = Math.max(material.alphaTest || 0, 0.01);
+}
+
+async function loadDdsAsCanvasTexture(url, textureName) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const canvas = decodeDdsToCanvas(await response.arrayBuffer());
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.name = textureName || "";
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.flipY = false;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.userData.hasAlpha = canvas.userData?.hasAlpha || false;
+    texture.needsUpdate = true;
+    return texture;
+  } catch (error) {
+    console.warn(`DDS alpha decode failed, falling back to DDSLoader: ${textureName}`, error);
+    const texture = await ddsLoader.loadAsync(url);
+    texture.userData.hasAlpha = true;
+    return texture;
+  }
+}
+
+function decodeDdsToCanvas(buffer) {
+  const view = new DataView(buffer);
+  if (view.getUint32(0, true) !== 0x20534444 || view.getUint32(4, true) !== 124) {
+    throw new Error("Invalid DDS file");
+  }
+  const height = view.getUint32(12, true);
+  const width = view.getUint32(16, true);
+  const pixelFlags = view.getUint32(80, true);
+  const fourCc = String.fromCharCode(
+    view.getUint8(84),
+    view.getUint8(85),
+    view.getUint8(86),
+    view.getUint8(87)
+  );
+  const data = new Uint8Array(buffer);
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  let hasAlpha = false;
+
+  if (pixelFlags & 0x4) {
+    const decoder = fourCc === "DXT1"
+      ? decodeDxt1Block
+      : fourCc === "DXT3"
+        ? decodeDxt3Block
+        : fourCc === "DXT5"
+          ? decodeDxt5Block
+          : null;
+    if (!decoder) throw new Error(`Unsupported DDS format ${fourCc}`);
+    const blockSize = fourCc === "DXT1" ? 8 : 16;
+    let offset = 128;
+    for (let blockY = 0; blockY < Math.ceil(height / 4); blockY++) {
+      for (let blockX = 0; blockX < Math.ceil(width / 4); blockX++) {
+        hasAlpha = decoder(data, offset, pixels, width, height, blockX * 4, blockY * 4) || hasAlpha;
+        offset += blockSize;
+      }
+    }
+  } else {
+    hasAlpha = decodeUncompressedDds(view, data, pixels, width, height);
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.putImageData(new ImageData(pixels, width, height), 0, 0);
+  canvas.userData = { hasAlpha };
+  return canvas;
+}
+
+function decodeDxt1Block(data, offset, pixels, width, height, startX, startY) {
+  const colors = decodeDxtColors(data[offset] | (data[offset + 1] << 8), data[offset + 2] | (data[offset + 3] << 8), true);
+  const codes = data[offset + 4] | (data[offset + 5] << 8) | (data[offset + 6] << 16) | (data[offset + 7] << 24);
+  let hasAlpha = false;
+  for (let y = 0; y < 4; y++) {
+    for (let x = 0; x < 4; x++) {
+      const color = colors[(codes >>> (2 * (y * 4 + x))) & 3];
+      hasAlpha = writeDdsPixel(pixels, width, height, startX + x, startY + y, color[0], color[1], color[2], color[3]) || hasAlpha;
+    }
+  }
+  return hasAlpha;
+}
+
+function decodeDxt3Block(data, offset, pixels, width, height, startX, startY) {
+  const colors = decodeDxtColors(data[offset + 8] | (data[offset + 9] << 8), data[offset + 10] | (data[offset + 11] << 8), false);
+  const codes = data[offset + 12] | (data[offset + 13] << 8) | (data[offset + 14] << 16) | (data[offset + 15] << 24);
+  let hasAlpha = false;
+  for (let y = 0; y < 4; y++) {
+    const alphaRow = data[offset + y * 2] | (data[offset + y * 2 + 1] << 8);
+    for (let x = 0; x < 4; x++) {
+      const color = colors[(codes >>> (2 * (y * 4 + x))) & 3];
+      const alpha = ((alphaRow >>> (x * 4)) & 0xf) * 17;
+      hasAlpha = writeDdsPixel(pixels, width, height, startX + x, startY + y, color[0], color[1], color[2], alpha) || hasAlpha;
+    }
+  }
+  return hasAlpha;
+}
+
+function decodeDxt5Block(data, offset, pixels, width, height, startX, startY) {
+  const alphas = decodeDxt5Alphas(data[offset], data[offset + 1]);
+  let alphaBits = 0n;
+  for (let i = 0; i < 6; i++) alphaBits |= BigInt(data[offset + 2 + i]) << BigInt(i * 8);
+  const colors = decodeDxtColors(data[offset + 8] | (data[offset + 9] << 8), data[offset + 10] | (data[offset + 11] << 8), false);
+  const codes = data[offset + 12] | (data[offset + 13] << 8) | (data[offset + 14] << 16) | (data[offset + 15] << 24);
+  let hasAlpha = false;
+  for (let y = 0; y < 4; y++) {
+    for (let x = 0; x < 4; x++) {
+      const index = y * 4 + x;
+      const color = colors[(codes >>> (2 * index)) & 3];
+      const alpha = alphas[Number((alphaBits >> BigInt(index * 3)) & 0x7n)];
+      hasAlpha = writeDdsPixel(pixels, width, height, startX + x, startY + y, color[0], color[1], color[2], alpha) || hasAlpha;
+    }
+  }
+  return hasAlpha;
+}
+
+function decodeDxtColors(color0, color1, allowTransparent) {
+  const c0 = decodeRgb565(color0);
+  const c1 = decodeRgb565(color1);
+  const colors = [
+    [c0[0], c0[1], c0[2], 255],
+    [c1[0], c1[1], c1[2], 255],
+    [0, 0, 0, 255],
+    [0, 0, 0, 255]
+  ];
+  if (allowTransparent && color0 <= color1) {
+    colors[2] = [Math.round((c0[0] + c1[0]) / 2), Math.round((c0[1] + c1[1]) / 2), Math.round((c0[2] + c1[2]) / 2), 255];
+    colors[3] = [0, 0, 0, 0];
+  } else {
+    colors[2] = [
+      Math.round((2 * c0[0] + c1[0]) / 3),
+      Math.round((2 * c0[1] + c1[1]) / 3),
+      Math.round((2 * c0[2] + c1[2]) / 3),
+      255
+    ];
+    colors[3] = [
+      Math.round((c0[0] + 2 * c1[0]) / 3),
+      Math.round((c0[1] + 2 * c1[1]) / 3),
+      Math.round((c0[2] + 2 * c1[2]) / 3),
+      255
+    ];
+  }
+  return colors;
+}
+
+function decodeRgb565(value) {
+  return [
+    Math.round(((value >> 11) & 0x1f) * 255 / 31),
+    Math.round(((value >> 5) & 0x3f) * 255 / 63),
+    Math.round((value & 0x1f) * 255 / 31)
+  ];
+}
+
+function decodeDxt5Alphas(alpha0, alpha1) {
+  const alphas = [alpha0, alpha1, 0, 0, 0, 0, 0, 0];
+  if (alpha0 > alpha1) {
+    for (let i = 1; i <= 6; i++) alphas[i + 1] = Math.round(((7 - i) * alpha0 + i * alpha1) / 7);
+  } else {
+    for (let i = 1; i <= 4; i++) alphas[i + 1] = Math.round(((5 - i) * alpha0 + i * alpha1) / 5);
+    alphas[6] = 0;
+    alphas[7] = 255;
+  }
+  return alphas;
+}
+
+function writeDdsPixel(pixels, width, height, x, y, r, g, b, a) {
+  if (x >= width || y >= height) return false;
+  const index = (y * width + x) * 4;
+  pixels[index] = r;
+  pixels[index + 1] = g;
+  pixels[index + 2] = b;
+  pixels[index + 3] = a;
+  return a < 255;
+}
+
+function decodeUncompressedDds(view, data, pixels, width, height) {
+  const rgbBitCount = view.getUint32(88, true);
+  const rMask = view.getUint32(92, true);
+  const gMask = view.getUint32(96, true);
+  const bMask = view.getUint32(100, true);
+  const aMask = view.getUint32(104, true);
+  if (rgbBitCount !== 32) throw new Error(`Unsupported DDS bit depth ${rgbBitCount}`);
+  let hasAlpha = false;
+  let offset = 128;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const value = view.getUint32(offset, true);
+      const a = aMask ? extractMaskedByte(value, aMask) : 255;
+      hasAlpha = writeDdsPixel(
+        pixels,
+        width,
+        height,
+        x,
+        y,
+        extractMaskedByte(value, rMask),
+        extractMaskedByte(value, gMask),
+        extractMaskedByte(value, bMask),
+        a
+      ) || hasAlpha;
+      offset += 4;
+    }
+  }
+  return hasAlpha;
+}
+
+function extractMaskedByte(value, mask) {
+  if (!mask) return 0;
+  const shift = Math.log2(mask & -mask);
+  const max = mask >>> shift;
+  return Math.round(((value & mask) >>> shift) * 255 / max);
 }
 
 function resolveTextureUrl(textureName, baseDir) {
@@ -717,11 +1221,11 @@ function populateSubmeshList(model) {
     count.textContent = `${part.vertexCount}/${part.faceCount}`;
     const edit = document.createElement("button");
     edit.type = "button";
-    edit.textContent = "编辑";
+    edit.textContent = t("edit");
     edit.addEventListener("click", () => openPartEditor(index));
     const exportButton = document.createElement("button");
     exportButton.type = "button";
-    exportButton.textContent = "导出";
+    exportButton.textContent = t("export");
     exportButton.addEventListener("click", () => exportPartGlb(index));
     label.append(checkbox, name, count, edit, exportButton);
     el.submeshList.append(label);
@@ -739,7 +1243,7 @@ function openPartEditor(index) {
   for (const [materialIndex, material] of state.currentModel.materials.entries()) {
     const option = document.createElement("option");
     option.value = String(materialIndex);
-    option.textContent = `${materialIndex}: ${material.textureName || "无贴图"}`;
+    option.textContent = `${materialIndex}: ${material.textureName || t("noTexture")}`;
     el.editMaterial.append(option);
   }
   el.editMaterial.value = String(part.materialId);
@@ -747,7 +1251,7 @@ function openPartEditor(index) {
   el.editParent.replaceChildren();
   const rootOption = document.createElement("option");
   rootOption.value = "-1";
-  rootOption.textContent = "-1: 根节点";
+  rootOption.textContent = `-1: ${t("rootNode")}`;
   el.editParent.append(rootOption);
   for (const [partIndex, candidate] of state.currentModel.submeshes.entries()) {
     if (partIndex === index) continue;
@@ -773,33 +1277,107 @@ async function exportSelectedPartsGlb() {
     .map((entry, index) => (entry.mesh.visible ? index : -1))
     .filter((index) => index >= 0);
   if (!indices.length) {
-    setStatus("没有选中的部件可导出");
+    setStatus(t("noSelectedParts"));
     return;
   }
   const baseName = state.currentModel.name.split(/[\\/]/).pop().replace(/\.[^.]+$/, "") || "model";
-  await exportPartsGlb(indices, `${sanitizeFilename(baseName)}_selected.glb`);
+  const group = await createAnimatedGlbExportGroup(indices);
+  const clips = await createLoadedAniClips();
+  await exportPartsGlb(indices, `${sanitizeFilename(baseName)}_selected.glb`, { group, animations: clips });
 }
 
-async function exportPartsGlb(indices, filename) {
+async function exportPartsGlb(indices, filename, options = {}) {
   try {
-    const group = createGlbExportGroup(indices);
+    const group = options.group || await createGlbExportGroup(indices);
     const exporter = new GLTFExporter();
     const result = await new Promise((resolve, reject) => {
-      exporter.parse(group, resolve, reject, { binary: true, embedImages: true });
+      exporter.parse(group, resolve, reject, {
+        binary: true,
+        embedImages: true,
+        animations: options.animations || []
+      });
     });
     const blob = result instanceof ArrayBuffer
       ? new Blob([result], { type: "model/gltf-binary" })
       : new Blob([JSON.stringify(result)], { type: "model/gltf+json" });
     downloadBlob(blob, filename);
     disposeObject(group);
-    setStatus(`已导出 ${filename}`);
+    setStatus(t("exported", { name: filename }));
   } catch (error) {
     console.error(error);
-    setStatus(`导出 GLB 失败: ${error.message}`);
+    setStatus(t("exportFailed", { message: error.message }));
   }
 }
 
-function createGlbExportGroup(indices) {
+async function createAnimatedGlbExportGroup(indices) {
+  const selected = new Set(indices);
+  const group = new THREE.Group();
+  group.name = "md9_export";
+  const exportNodes = new Map();
+
+  for (const [index, part] of state.currentModel.submeshes.entries()) {
+    const node = new THREE.Group();
+    const transform = getPartTransform(part);
+    node.name = part.name || `part_${index}`;
+    node.position.copy(transform.position);
+    node.quaternion.copy(transform.quaternion);
+    node.scale.copy(transform.scale);
+    exportNodes.set(index, node);
+  }
+
+  for (const [index, part] of state.currentModel.submeshes.entries()) {
+    const node = exportNodes.get(index);
+    const parentNode = exportNodes.get(part.parentId);
+    (parentNode || group).add(node);
+  }
+
+  for (const index of selected) {
+    const entry = state.meshEntries[index];
+    const node = exportNodes.get(index);
+    if (!entry?.mesh || !node) continue;
+    const mesh = new THREE.Mesh(entry.mesh.geometry.clone(), await cloneExportMaterial(entry.mesh.material));
+    mesh.name = entry.part?.name || entry.mesh.name || `part_${index}`;
+    node.add(mesh);
+  }
+
+  return group;
+}
+
+async function createLoadedAniClips() {
+  const clips = [];
+  for (const item of state.aniFiles) {
+    try {
+      if (!item.animation) item.animation = parseAni(await item.file.arrayBuffer(), item.label);
+      clips.push(createAnimationClipFromAni(item.animation));
+    } catch (error) {
+      console.warn(`ANI export skipped: ${item.label}`, error);
+    }
+  }
+  return clips;
+}
+
+function createAnimationClipFromAni(animation) {
+  const tracks = [];
+  for (const [boneName, track] of animation.tracks) {
+    if (track.positions.length) {
+      tracks.push(new THREE.VectorKeyframeTrack(
+        `${boneName}.position`,
+        track.positions.map((key) => key.time / ANIMATION_FPS),
+        track.positions.flatMap((key) => [key.value.x, key.value.y, key.value.z])
+      ));
+    }
+    if (track.rotations.length) {
+      tracks.push(new THREE.QuaternionKeyframeTrack(
+        `${boneName}.quaternion`,
+        track.rotations.map((key) => key.time / ANIMATION_FPS),
+        track.rotations.flatMap((key) => [key.value.x, key.value.y, key.value.z, key.value.w])
+      ));
+    }
+  }
+  return new THREE.AnimationClip(sanitizeFilename(animation.name).replace(/\.ani$/i, ""), animation.duration / ANIMATION_FPS, tracks);
+}
+
+async function createGlbExportGroup(indices) {
   const group = new THREE.Group();
   group.name = "md9_export";
   state.root?.updateWorldMatrix(true, true);
@@ -812,7 +1390,7 @@ function createGlbExportGroup(indices) {
     const geometry = entry.mesh.geometry.clone();
     const matrix = new THREE.Matrix4().multiplyMatrices(inverseRoot, entry.mesh.matrixWorld);
     geometry.applyMatrix4(matrix);
-    const material = cloneExportMaterial(entry.mesh.material);
+    const material = await cloneExportMaterial(entry.mesh.material);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = entry.part?.name || entry.mesh.name || `part_${index}`;
     group.add(mesh);
@@ -820,16 +1398,73 @@ function createGlbExportGroup(indices) {
   return group;
 }
 
-function cloneExportMaterial(material) {
+async function cloneExportMaterial(material) {
   const source = Array.isArray(material) ? material[0] : material;
   const clone = source?.clone?.() || new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
   clone.side = THREE.DoubleSide;
   clone.wireframe = false;
   if (clone.map) {
-    clone.map = clone.map.clone();
+    const converted = await createAlphaPngTexture(clone.map);
+    clone.map = converted.texture || clone.map.clone();
     clone.map.needsUpdate = true;
+    if (converted.hasAlpha || clone.opacity < 1) {
+      clone.transparent = true;
+      clone.alphaTest = Math.min(clone.alphaTest || 0.001, 0.001);
+    }
   }
   return clone;
+}
+
+async function createAlphaPngTexture(sourceTexture) {
+  const image = sourceTexture?.image;
+  const width = getImageWidth(image);
+  const height = getImageHeight(image);
+  if (!image || !width || !height || typeof document === "undefined") {
+    return { texture: null, hasAlpha: false };
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const ctx = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
+  if (!ctx) return { texture: null, hasAlpha: false };
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  try {
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  } catch (error) {
+    console.warn("Texture PNG conversion skipped", error);
+    return { texture: null, hasAlpha: false };
+  }
+
+  let hasAlpha = false;
+  try {
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] < 255) {
+        hasAlpha = true;
+        break;
+      }
+    }
+  } catch (error) {
+    console.warn("Texture alpha scan skipped", error);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.name = sourceTexture.name || "";
+  texture.colorSpace = sourceTexture.colorSpace || THREE.SRGBColorSpace;
+  texture.flipY = sourceTexture.flipY;
+  texture.wrapS = sourceTexture.wrapS;
+  texture.wrapT = sourceTexture.wrapT;
+  texture.minFilter = sourceTexture.minFilter;
+  texture.magFilter = sourceTexture.magFilter;
+  texture.generateMipmaps = sourceTexture.generateMipmaps;
+  texture.offset.copy(sourceTexture.offset);
+  texture.repeat.copy(sourceTexture.repeat);
+  texture.center.copy(sourceTexture.center);
+  texture.rotation = sourceTexture.rotation;
+  texture.needsUpdate = true;
+  return { texture, hasAlpha };
 }
 
 function buildTransformEditor(part) {
@@ -883,7 +1518,7 @@ function applyEditorValues() {
 
   syncPartBone(part);
   updateModelDerivedData();
-  setStatus(`已更新部件 ${part.name}`);
+  setStatus(t("updatedPart", { name: part.name }));
 }
 
 function syncTransformInputPair(source) {
@@ -984,7 +1619,7 @@ async function restoreEditedPart() {
   updatePartGeometry(state.editIndex);
   updateModelDerivedData();
   openPartEditor(state.editIndex);
-  setStatus(`已还原部件 ${part.name}`);
+  setStatus(t("restoredPart", { name: part.name }));
 }
 
 function restorePartFromState(part, snapshot) {
@@ -1031,13 +1666,13 @@ function clearEditedPartMesh() {
   updateModelDerivedData();
   populateSubmeshList(state.currentModel);
   openPartEditor(state.editIndex);
-  setStatus(`已用极小三角形清空部件 ${part.name}`);
+  setStatus(t("clearedMesh", { name: part.name }));
 }
 
 function deleteEditedPart() {
   if (!state.currentModel || state.editIndex < 0) return;
   if (state.currentModel.submeshes.length <= 1) {
-    setStatus("不能删除最后一个部件");
+    setStatus(t("cannotDeleteLast"));
     return;
   }
   const deleteIndex = state.editIndex;
@@ -1071,17 +1706,17 @@ function deleteEditedPart() {
   rebuildSceneHelpers();
   updateModelDerivedData();
   populateSubmeshList(state.currentModel);
-  setStatus(`已删除部件 ${deleted.name}`);
+  setStatus(t("deletedPart", { name: deleted.name }));
 }
 
 async function replaceEditedPartFromFiles(files) {
   if (!state.currentModel || state.editIndex < 0) {
-    setStatus("请先点击某个部件的编辑按钮");
+    setStatus(t("selectPartFirst"));
     return;
   }
   const modelFile = files.find((file) => isReplacementModelFile(file.name));
   if (!modelFile) {
-    setStatus("替换部件需要 obj、glb 或 gltf 文件");
+    setStatus(t("replacementNeedsModel"));
     return;
   }
   const textureFile = files.find((file) => isTextureFile(file.name));
@@ -1089,11 +1724,11 @@ async function replaceEditedPartFromFiles(files) {
   const part = state.currentModel.submeshes[state.editIndex];
   const replacement = await parseReplacementModel(modelFile, mtlFile, files);
   if (replacement.positions.length === 0) {
-    setStatus("替换失败: OBJ 中没有可用 mesh");
+    setStatus(t("replacementNoMesh"));
     return;
   }
   if (replacement.positions.length / 3 > 65535) {
-    setStatus("替换失败: 单个部件顶点数超过 65535");
+    setStatus(t("replacementTooLarge"));
     return;
   }
   const materialTextureFile = replacement.textureFile || (replacement.textureImage ? null : textureFile) || null;
@@ -1153,7 +1788,7 @@ async function replaceEditedPartFromFiles(files) {
   updateModelDerivedData();
   populateSubmeshList(state.currentModel);
   openPartEditor(state.editIndex);
-  setStatus(`已替换部件 ${part.name}${modelFile.name.toLowerCase().endsWith(".obj") && mtlFile ? "，已读取 MTL" : ""}`);
+  setStatus(t("replacedPart", { name: part.name, mtl: modelFile.name.toLowerCase().endsWith(".obj") && mtlFile ? t("readMtl") : "" }));
 }
 
 async function parseReplacementModel(modelFile, mtlFile, files) {
@@ -1625,6 +2260,7 @@ async function createMaterialFromFile(material, file) {
   texture.wrapT = THREE.RepeatWrapping;
   threeMaterial.map = texture;
   threeMaterial.userData.baseMap = texture;
+  applyTextureAlphaToMaterial(threeMaterial, texture);
   return threeMaterial;
 }
 
@@ -1650,7 +2286,7 @@ function updateModelSelect() {
   if (!state.md9Files.length) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "尚未加载 md9";
+    option.textContent = t("noMd9Loaded");
     el.modelSelect.append(option);
     el.modelSelect.disabled = true;
     el.clearModels.disabled = true;
@@ -1671,7 +2307,7 @@ function updateAnimationSelect() {
   el.animationSelect.replaceChildren();
   const defaultOption = document.createElement("option");
   defaultOption.value = "";
-  defaultOption.textContent = "默认姿势";
+  defaultOption.textContent = t("defaultPose");
   el.animationSelect.append(defaultOption);
   for (const item of state.aniFiles) {
     const option = document.createElement("option");
@@ -1698,7 +2334,7 @@ function clearModels() {
   updateStatsEmpty();
   updateModelSelect();
   updateMissingTextures(null);
-  setStatus("已清空模型");
+  setStatus(t("modelsCleared"));
 }
 
 function clearAnimations() {
@@ -1709,7 +2345,7 @@ function clearAnimations() {
   updateAnimationSelect();
   updateFrameControls();
   resetPose();
-  setStatus("已清空动画");
+  setStatus(t("animationsCleared"));
 }
 
 function updateStatsEmpty() {
@@ -1735,7 +2371,7 @@ function updateMissingTextures(model) {
   if (!model) {
     const row = document.createElement("div");
     const name = document.createElement("span");
-    name.textContent = "尚未加载模型";
+    name.textContent = t("noModelLoaded");
     row.append(name);
     el.missingTextures.append(row);
     return;
@@ -1743,7 +2379,7 @@ function updateMissingTextures(model) {
   if (state.missingTextures.size === 0) {
     const row = document.createElement("div");
     const name = document.createElement("span");
-    name.textContent = "贴图文件完整";
+    name.textContent = t("texturesComplete");
     row.append(name);
     el.missingTextures.append(row);
     return;
@@ -1753,7 +2389,7 @@ function updateMissingTextures(model) {
     const name = document.createElement("span");
     name.textContent = textureName;
     const hint = document.createElement("small");
-    hint.textContent = "拖入或打开补充";
+    hint.textContent = t("dropOrOpen");
     row.append(name, hint);
     el.missingTextures.append(row);
   }
@@ -2032,10 +2668,10 @@ async function saveCurrentModel() {
     const md9 = serializeMd9(state.currentModel);
     const baseName = state.currentModel.name.split(/[\\/]/).pop().replace(/\.[^.]+$/, "") || "model";
     downloadBlob(new Blob([md9], { type: "application/octet-stream" }), `${baseName}_edited.md9`);
-    setStatus(`已保存 ${baseName}_edited.md9`);
+    setStatus(t("savedMd9", { name: `${baseName}_edited.md9` }));
   } catch (error) {
     console.error(error);
-    setStatus(`保存失败: ${error.message}`);
+    setStatus(t("saveFailed", { message: error.message }));
   } finally {
     restoreSaveMutationSnapshot(state.currentModel, saveSnapshot);
   }
@@ -2102,13 +2738,13 @@ async function bakeReplacementAtlas(model) {
 
 async function downloadCanvasPng(canvas, filename) {
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) throw new Error("PNG atlas 编码失败");
+  if (!blob) throw new Error(t("pngEncodeFailed"));
   downloadBlob(blob, filename);
 }
 
 async function downloadTextureAndAskName(canvas, defaultName) {
   await downloadCanvasPng(canvas, defaultName);
-  const chosen = window.prompt("请输入该贴图写入 MD9 的文件名", defaultName);
+  const chosen = window.prompt(t("textureNamePrompt"), defaultName);
   return normalizeMd9TextureName(chosen || defaultName);
 }
 
@@ -2222,12 +2858,12 @@ async function loadImageBitmapSource(source) {
   if (typeof HTMLCanvasElement !== "undefined" && source instanceof HTMLCanvasElement) return source;
   if (typeof HTMLImageElement !== "undefined" && source instanceof HTMLImageElement) return source;
   if (typeof OffscreenCanvas !== "undefined" && source instanceof OffscreenCanvas) return source;
-  throw new Error("无法读取替换贴图");
+  throw new Error(t("cannotReadTexture"));
 }
 
 async function loadImageBitmap(file) {
   if (file.name.toLowerCase().endsWith(".dds")) {
-    throw new Error("第一版保存 PNG atlas 不支持把 DDS 重新编码进 PNG，请为替换 mesh 使用 png/jpg/webp 贴图");
+    throw new Error(t("ddsPngUnsupported"));
   }
   if ("createImageBitmap" in window) return createImageBitmap(file);
   const url = URL.createObjectURL(file);
@@ -2298,12 +2934,13 @@ function setStatus(message) {
 
 async function showHelpDialog() {
   if (!el.helpDialog.open) el.helpDialog.showModal();
+  el.helpContent.textContent = t("loading");
   try {
-    const response = await fetch("./src/help.txt", { cache: "no-store" });
+    const response = await fetch(`./src/help.${state.language}.txt`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     el.helpContent.textContent = await response.text();
   } catch (error) {
-    el.helpContent.textContent = `使用说明加载失败: ${error.message}`;
+    el.helpContent.textContent = t("helpLoadFailed", { message: error.message });
   }
 }
 

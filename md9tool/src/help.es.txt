@@ -1,0 +1,24 @@
+Ayuda de MD9 Tool
+
+1. Abrir archivos
+   - Abre archivos individuales o una carpeta completa.
+   - Puedes soltar md9, ani, obj, glb, gltf, bin y texturas comunes.
+
+2. Vista
+   - Boton izquierdo para rotar, rueda para zoom, boton derecho para mover.
+   - El panel permite activar texturas, malla, esqueleto, normales, caja y cuadricula.
+
+3. Editar partes
+   - Haz clic en Editar en la lista de partes.
+   - Puedes cambiar padre, material, posicion, rotacion y escala.
+   - Puedes reemplazar el mesh con OBJ / GLB / GLTF.
+   - Puedes restaurar, limpiar el mesh o eliminar una parte.
+
+4. Exportar
+   - Exportar en una fila exporta esa parte como GLB.
+   - Exportar seleccion exporta las partes marcadas como un solo GLB.
+
+5. Guardar MD9
+   - Las texturas nuevas se descargan primero.
+   - Luego introduce el nombre de textura que se escribira en el MD9.
+   - Finalmente se descarga el MD9 editado.
