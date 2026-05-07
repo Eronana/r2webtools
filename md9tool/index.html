@@ -16,17 +16,20 @@
   </head>
   <body>
     <main id="app">
-      <section id="viewport" aria-label="MD9 viewport"></section>
+      <section id="viewport" aria-label="MD9 viewport">
+        <button id="helpButton" class="icon-button help-button" type="button" title="使用说明" aria-label="使用说明">?</button>
+      </section>
       <aside id="panel">
         <div class="panel-block">
           <label class="file-button">
-            <input id="fileInput" type="file" accept=".md9,.ani,.dds,.png,.jpg,.jpeg,.webp" multiple />
-            打开 MD9 / ANI / 贴图
+            <input id="fileInput" type="file" accept=".md9,.ani,.obj,.mtl,.glb,.gltf,.bin,.dds,.png,.jpg,.jpeg,.webp" multiple />
+            打开 MD9 / ANI / 模型 / 贴图
           </label>
           <label class="file-button">
             <input id="folderInput" type="file" webkitdirectory multiple />
             打开目录
           </label>
+          <button id="saveModel" type="button" disabled>保存 MD9</button>
         </div>
 
         <div class="panel-block">
@@ -85,12 +88,52 @@
         </div>
 
         <div class="panel-block">
-          <div class="submesh-title">部件</div>
+          <div class="submesh-head">
+            <div class="submesh-title">部件</div>
+            <button id="exportSelectedParts" type="button" disabled>导出选中</button>
+          </div>
           <div id="submeshList" class="submesh-list"></div>
+        </div>
+
+        <div id="editorBlock" class="panel-block editor-block" hidden>
+          <div class="editor-head">
+            <div>
+              <div class="submesh-title">编辑部件</div>
+              <strong id="editorName">-</strong>
+            </div>
+            <button id="restorePart" type="button">还原</button>
+          </div>
+          <div class="editor-actions">
+            <button id="clearPartMesh" type="button">清空 Mesh</button>
+            <button id="deletePart" type="button">删除部件</button>
+          </div>
+
+          <div class="edit-grid">
+            <label for="editMaterial">材质</label>
+            <select id="editMaterial"></select>
+            <label for="editParent">父部件</label>
+            <select id="editParent"></select>
+          </div>
+
+          <div class="submesh-title">变换</div>
+          <div id="transformEditor" class="transform-editor"></div>
+
+          <label class="file-button">
+            <input id="replaceMeshInput" type="file" accept=".obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.dds" multiple />
+            替换 OBJ / GLB / GLTF
+          </label>
+          <small id="replaceHint">可把 obj/mtl 或 glb/gltf/bin 和贴图一起拖入页面</small>
         </div>
       </aside>
       <div id="status">选择一个 md9 文件</div>
-      <div id="dropOverlay">拖入 md9 / ani / 贴图文件</div>
+      <div id="dropOverlay">拖入 md9 / ani / obj / glb / gltf / 贴图文件</div>
+      <dialog id="helpDialog" class="help-dialog">
+        <div class="help-dialog-head">
+          <strong>使用说明</strong>
+          <button id="helpClose" class="icon-button" type="button" aria-label="关闭">×</button>
+        </div>
+        <pre id="helpContent">加载中...</pre>
+      </dialog>
     </main>
     <script type="module" src="./src/main.js"></script>
   </body>

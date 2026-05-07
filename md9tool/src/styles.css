@@ -45,6 +45,57 @@ body,
   height: 100%;
 }
 
+.icon-button {
+  width: 34px;
+  min-height: 34px;
+  border-radius: 6px;
+  padding: 0;
+  font-weight: 800;
+}
+
+.help-button {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  background: rgb(36 42 49 / 86%);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.help-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 32px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0;
+}
+
+.help-dialog::backdrop {
+  background: rgb(0 0 0 / 52%);
+}
+
+.help-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.help-dialog pre {
+  max-height: calc(min(720px, 100vh - 32px) - 60px);
+  margin: 0;
+  overflow: auto;
+  padding: 14px;
+  color: var(--text);
+  font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
 #panel {
   height: 100%;
   overflow: auto;
@@ -73,7 +124,8 @@ label,
 
 select,
 button,
-.file-button {
+.file-button,
+input[type="number"] {
   min-height: 36px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -82,7 +134,8 @@ button,
   font: inherit;
 }
 
-select {
+select,
+input[type="number"] {
   width: 100%;
   padding: 0 10px;
 }
@@ -183,8 +236,21 @@ input[type="checkbox"] {
   padding-right: 2px;
 }
 
-.submesh-list label {
+.submesh-head {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 8px;
+}
+
+.submesh-head button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.submesh-list label {
+  justify-content: stretch;
   gap: 10px;
   border-radius: 6px;
   padding: 4px 6px;
@@ -192,9 +258,95 @@ input[type="checkbox"] {
 }
 
 .submesh-list span {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.submesh-list button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.editor-block {
+  gap: 12px;
+}
+
+.editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.editor-head strong {
+  display: block;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-head button {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.editor-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.editor-actions button {
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.edit-grid {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-grid label {
+  color: var(--muted);
+}
+
+.transform-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.transform-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 76px;
+  align-items: center;
+  gap: 8px;
+}
+
+.transform-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.transform-row input[type="number"] {
+  min-width: 0;
+  height: 32px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.transform-row input[type="range"] {
+  min-width: 0;
+}
+
+#replaceHint {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .missing-block {
