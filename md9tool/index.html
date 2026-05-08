@@ -18,7 +18,6 @@
     <main id="app">
       <section id="viewport" aria-label="MD9 viewport">
         <div class="viewport-tools">
-          <div class="contact-text">交流QQ群: 1094233945</div>
           <div class="viewport-tool-row">
             <button id="helpButton" class="icon-button help-button" type="button" title="Help" aria-label="Help">?</button>
             <div id="languageButtons" class="language-buttons" role="group" aria-label="Language">
@@ -27,6 +26,8 @@
               <button type="button" data-language="es">ES</button>
             </div>
           </div>
+          <div class="version-text">Build 2026.05.08.1420</div>
+          <div class="contact-text">交流QQ群: 1094233945</div>
         </div>
       </section>
       <aside id="panel">
@@ -102,6 +103,7 @@
             <div class="submesh-title" data-i18n="parts">Parts</div>
             <div class="submesh-head-actions">
               <button id="addPart" type="button" disabled data-i18n="addPart">Add part</button>
+              <button id="duplicatePart" type="button" disabled data-i18n="duplicatePart">Duplicate part</button>
               <button id="exportSelectedParts" type="button" disabled data-i18n="exportIntegrated">Export integrated</button>
             </div>
           </div>
@@ -160,6 +162,10 @@
           <label class="file-button">
             <input id="replaceMeshInput" type="file" accept=".obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.dds" multiple />
             <span data-i18n="replaceModel">Replace OBJ / GLB / GLTF</span>
+          </label>
+          <label class="switch-row">
+            <input id="replaceKeepSize" type="checkbox" />
+            <span data-i18n="replaceKeepSize">Keep size</span>
           </label>
           <small id="replaceHint" data-i18n="replaceHint">Drop obj/mtl or glb/gltf/bin with textures here</small>
         </div>
