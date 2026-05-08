@@ -5,6 +5,7 @@ import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import { readPakFromBuffer } from "./pak.js";
 
 const el = {
   app: document.querySelector("#app"),
@@ -33,13 +34,22 @@ const el = {
   showBounds: document.querySelector("#showBounds"),
   showGrid: document.querySelector("#showGrid"),
   normalScale: document.querySelector("#normalScale"),
+  addPart: document.querySelector("#addPart"),
   exportSelectedParts: document.querySelector("#exportSelectedParts"),
+  batchExportParts: document.querySelector("#batchExportParts"),
+  batchReplaceInput: document.querySelector("#batchReplaceInput"),
+  batchEditToggle: document.querySelector("#batchEditToggle"),
+  batchGroupTransform: document.querySelector("#batchGroupTransform"),
+  batchEditReset: document.querySelector("#batchEditReset"),
+  batchEditPanel: document.querySelector("#batchEditPanel"),
+  batchTransformEditor: document.querySelector("#batchTransformEditor"),
   submeshList: document.querySelector("#submeshList"),
   editorBlock: document.querySelector("#editorBlock"),
   editorName: document.querySelector("#editorName"),
   restorePart: document.querySelector("#restorePart"),
   clearPartMesh: document.querySelector("#clearPartMesh"),
   deletePart: document.querySelector("#deletePart"),
+  editName: document.querySelector("#editName"),
   editMaterial: document.querySelector("#editMaterial"),
   editParent: document.querySelector("#editParent"),
   matrixMode: document.querySelector("#matrixMode"),
@@ -105,9 +115,23 @@ const I18N = {
     parts: "Parts",
     vertices: "Vertices",
     faces: "Faces",
+    verts: "Vtx",
+    facesShort: "Tri",
     exportSelected: "Export selected",
+    exportIntegrated: "Export GLB",
+    addPart: "Add part",
+    partName: "Name",
+    batchExport: "Export ZIP",
+    batchReplace: "Batch Replace",
+    batchEdit: "Batch Edit",
+    groupTransform: "As group",
+    visible: "Show",
+    selected: "Edit",
+    batchReplaced: "Batch replaced {count} parts",
+    batchReplaceNoMatch: "No matching part names for selected models",
     editPart: "Edit part",
     restore: "Restore",
+    reset: "Reset",
     clearMesh: "Clear Mesh",
     deletePart: "Delete part",
     material: "Material",
@@ -156,7 +180,8 @@ const I18N = {
     savedMd9: "Saved {name}",
     saveFailed: "Save failed: {message}",
     pngEncodeFailed: "PNG atlas encoding failed",
-    textureNamePrompt: "Enter the texture filename to write into the MD9",
+    textureNamePrompt: "Enter the DDS texture filename to write into the MD9",
+    modelNamePrompt: "Enter the model filename",
     cannotReadTexture: "Cannot read replacement texture",
     ddsPngUnsupported: "PNG atlas saving cannot re-encode DDS in this version. Use png/jpg/webp for replacement mesh textures.",
     helpLoadFailed: "Failed to load help: {message}"
@@ -184,9 +209,23 @@ const I18N = {
     parts: "部件",
     vertices: "顶点",
     faces: "面",
+    verts: "顶点",
+    facesShort: "面",
     exportSelected: "导出选中",
+    exportIntegrated: "整合导出",
+    addPart: "添加部件",
+    partName: "名称",
+    batchExport: "批量导出",
+    batchReplace: "批量替换",
+    batchEdit: "批量编辑",
+    groupTransform: "整体变换",
+    visible: "展示",
+    selected: "编辑",
+    batchReplaced: "已批量替换 {count} 个部件",
+    batchReplaceNoMatch: "选择的模型没有匹配到同名部件",
     editPart: "编辑部件",
     restore: "还原",
+    reset: "重置",
     clearMesh: "清空 Mesh",
     deletePart: "删除部件",
     material: "材质",
@@ -235,7 +274,8 @@ const I18N = {
     savedMd9: "已保存 {name}",
     saveFailed: "保存失败: {message}",
     pngEncodeFailed: "PNG atlas 编码失败",
-    textureNamePrompt: "请输入该贴图写入 MD9 的文件名",
+    textureNamePrompt: "请输入写入 MD9 的 DDS 贴图文件名",
+    modelNamePrompt: "请输入模型文件名",
     cannotReadTexture: "无法读取替换贴图",
     ddsPngUnsupported: "第一版保存 PNG atlas 不支持把 DDS 重新编码进 PNG，请为替换 mesh 使用 png/jpg/webp 贴图",
     helpLoadFailed: "使用说明加载失败: {message}"
@@ -263,9 +303,23 @@ const I18N = {
     parts: "Partes",
     vertices: "Vertices",
     faces: "Caras",
+    verts: "Vert.",
+    facesShort: "Tri",
     exportSelected: "Exportar seleccion",
+    exportIntegrated: "Exportar GLB",
+    addPart: "Agregar parte",
+    partName: "Nombre",
+    batchExport: "Exportar ZIP",
+    batchReplace: "Reempl. lote",
+    batchEdit: "Editar lote",
+    groupTransform: "Como grupo",
+    visible: "Ver",
+    selected: "Editar",
+    batchReplaced: "Reemplazadas {count} partes",
+    batchReplaceNoMatch: "Ningun modelo coincide con partes por nombre",
     editPart: "Editar parte",
     restore: "Restaurar",
+    reset: "Restablecer",
     clearMesh: "Limpiar Mesh",
     deletePart: "Eliminar parte",
     material: "Material",
@@ -314,7 +368,8 @@ const I18N = {
     savedMd9: "Guardado {name}",
     saveFailed: "Error al guardar: {message}",
     pngEncodeFailed: "Error al codificar PNG atlas",
-    textureNamePrompt: "Introduce el nombre de textura para escribir en MD9",
+    textureNamePrompt: "Introduce el nombre DDS para escribir en MD9",
+    modelNamePrompt: "Introduce el nombre del modelo",
     cannotReadTexture: "No se puede leer la textura de reemplazo",
     ddsPngUnsupported: "Esta version no puede recodificar DDS en el atlas PNG. Usa png/jpg/webp para texturas de reemplazo.",
     helpLoadFailed: "Error al cargar ayuda: {message}"
@@ -332,6 +387,14 @@ const TRANSFORM_CONTROLS = [
   { label: "SY", transform: "scale", axis: "y", min: 0.01, max: 10, step: 0.01 },
   { label: "SZ", transform: "scale", axis: "z", min: 0.01, max: 10, step: 0.01 }
 ];
+const CRC32_TABLE = new Uint32Array(256);
+for (let i = 0; i < CRC32_TABLE.length; i++) {
+  let value = i;
+  for (let bit = 0; bit < 8; bit++) {
+    value = (value & 1) ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  CRC32_TABLE[i] = value >>> 0;
+}
 const state = {
   language: "en",
   md9Files: [],
@@ -351,6 +414,8 @@ const state = {
   currentAniId: "",
   animationStartTime: 0,
   animationFrame: 0,
+  batchTransformMatrix: new THREE.Matrix4(),
+  batchSelectedParts: new Set(),
   boneNodes: new Map(),
   missingTextures: new Set()
 };
@@ -374,10 +439,19 @@ el.animationSelect.addEventListener("change", () => loadSelectedAnimation(el.ani
 el.clearModels.addEventListener("click", clearModels);
 el.clearAnimations.addEventListener("click", clearAnimations);
 el.saveModel.addEventListener("click", saveCurrentModel);
+el.addPart.addEventListener("click", addPart);
 el.exportSelectedParts.addEventListener("click", exportSelectedPartsGlb);
+el.batchExportParts.addEventListener("click", batchExportSelectedPartsGlb);
+el.batchReplaceInput.addEventListener("change", async () => {
+  await batchReplaceSelectedPartsFromFiles([...el.batchReplaceInput.files]);
+  el.batchReplaceInput.value = "";
+});
+el.batchEditToggle.addEventListener("click", toggleBatchEditor);
+el.batchEditReset.addEventListener("click", resetBatchEditor);
 el.restorePart.addEventListener("click", restoreEditedPart);
 el.clearPartMesh.addEventListener("click", clearEditedPartMesh);
 el.deletePart.addEventListener("click", deleteEditedPart);
+el.editName.addEventListener("input", applyEditorValues);
 el.editMaterial.addEventListener("input", applyEditorValues);
 el.editParent.addEventListener("input", applyEditorValues);
 el.matrixMode.addEventListener("change", () => {
@@ -418,6 +492,12 @@ el.editorBlock.addEventListener("input", (event) => {
     applyEditorValues();
   }
 });
+el.batchEditPanel.addEventListener("input", (event) => {
+  if (event.target.matches("[data-transform]")) {
+    syncBatchTransformInputPair(event.target);
+    applyBatchEditorDelta();
+  }
+});
 
 const resizeObserver = new ResizeObserver(resize);
 resizeObserver.observe(el.viewport);
@@ -433,6 +513,12 @@ function t(key, values = {}) {
 }
 
 function detectInitialLanguage() {
+  try {
+    const saved = localStorage.getItem("md9tool.language");
+    if (I18N[saved]) return saved;
+  } catch (error) {
+    console.warn("Language preference read failed", error);
+  }
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language];
   for (const language of languages) {
     const base = String(language || "").toLowerCase().split("-")[0];
@@ -443,6 +529,11 @@ function detectInitialLanguage() {
 
 function setLanguage(language) {
   state.language = I18N[language] ? language : "en";
+  try {
+    localStorage.setItem("md9tool.language", state.language);
+  } catch (error) {
+    console.warn("Language preference save failed", error);
+  }
   document.documentElement.lang = state.language === "zh" ? "zh-CN" : state.language;
   for (const button of el.languageButtons.querySelectorAll("[data-language]")) {
     const active = button.dataset.language === state.language;
@@ -469,6 +560,14 @@ function setLanguage(language) {
 }
 
 async function addFiles(files) {
+  const zipFiles = files.filter((file) => /\.zip$/i.test(file.name));
+  const pakFiles = files.filter((file) => /\.pak$/i.test(file.name));
+  if (zipFiles.length || pakFiles.length) {
+    const expanded = [];
+    for (const file of zipFiles) expanded.push(...(await unzipFile(file)));
+    for (const file of pakFiles) expanded.push(...(await unpackPakFile(file)));
+    files = [...files.filter((file) => !/\.(zip|pak)$/i.test(file.name)), ...expanded];
+  }
   const md9Files = files.filter((file) => file.name.toLowerCase().endsWith(".md9"));
   const aniFiles = files.filter((file) => file.name.toLowerCase().endsWith(".ani"));
   const textureFiles = files.filter((file) => isTextureFile(file.name));
@@ -533,9 +632,15 @@ function resetOpenedFiles() {
   state.currentAniId = "";
   state.missingTextures = new Set();
   state.editIndex = -1;
+  state.batchSelectedParts = new Set();
   el.saveModel.disabled = true;
+  el.addPart.disabled = true;
   el.exportSelectedParts.disabled = true;
+  el.batchExportParts.disabled = true;
+  el.batchEditToggle.disabled = true;
   el.editorBlock.hidden = true;
+  el.batchEditPanel.hidden = true;
+  setBatchEditToggleActive(false);
   el.submeshList.replaceChildren();
   updateModelSelect();
   updateAnimationSelect();
@@ -621,8 +726,12 @@ async function showModel(model, label) {
   disposeCurrent();
   state.currentModel = model;
   state.editIndex = -1;
+  state.batchSelectedParts = new Set();
   el.saveModel.disabled = false;
+  el.addPart.disabled = false;
   el.editorBlock.hidden = true;
+  el.batchEditPanel.hidden = true;
+  setBatchEditToggleActive(false);
   state.root = new THREE.Group();
   state.root.name = model.name;
   scene.add(state.root);
@@ -1213,18 +1322,49 @@ function createBoneNodes(model) {
 
 function populateSubmeshList(model) {
   el.submeshList.replaceChildren();
-  el.exportSelectedParts.disabled = !model.submeshes.length;
+  const header = document.createElement("div");
+  header.className = "submesh-row submesh-table-head";
+  const visibleAll = document.createElement("input");
+  visibleAll.type = "checkbox";
+  visibleAll.checked = state.meshEntries.every((entry) => entry?.mesh?.visible);
+  visibleAll.addEventListener("input", () => setAllPartsVisible(visibleAll.checked));
+  const editAll = document.createElement("input");
+  editAll.type = "checkbox";
+  editAll.checked = model.submeshes.length > 0 && model.submeshes.every((_, index) => state.batchSelectedParts.has(index));
+  editAll.addEventListener("input", () => setAllPartsSelected(editAll.checked));
+  const visibleHead = createHeaderCheckboxCell(visibleAll, t("visible"));
+  const editHead = createHeaderCheckboxCell(editAll, t("selected"));
+  const nameHead = document.createElement("span");
+  nameHead.textContent = t("parts");
+  const countHead = document.createElement("span");
+  countHead.textContent = `${t("verts")}/${t("facesShort")}`;
+  header.append(visibleHead, editHead, nameHead, countHead, document.createElement("span"), document.createElement("span"));
+  el.submeshList.append(header);
+  updateBatchActionState();
   for (const [index, part] of model.submeshes.entries()) {
-    const label = document.createElement("label");
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = state.meshEntries[index]?.mesh.visible ?? true;
-    checkbox.addEventListener("input", () => {
-      state.meshEntries[index].mesh.visible = checkbox.checked;
-      state.normalVisualizers[index].visible = checkbox.checked && el.showNormals.checked;
+    const row = document.createElement("div");
+    row.className = "submesh-row";
+    const visibleCheckbox = document.createElement("input");
+    visibleCheckbox.type = "checkbox";
+    visibleCheckbox.checked = state.meshEntries[index]?.mesh.visible ?? true;
+    visibleCheckbox.addEventListener("input", () => {
+      state.meshEntries[index].mesh.visible = visibleCheckbox.checked;
+      state.normalVisualizers[index].visible = visibleCheckbox.checked && el.showNormals.checked;
+    });
+    const editCheckbox = document.createElement("input");
+    editCheckbox.type = "checkbox";
+    editCheckbox.checked = state.batchSelectedParts.has(index);
+    editCheckbox.addEventListener("input", () => {
+      if (editCheckbox.checked) {
+        state.batchSelectedParts.add(index);
+      } else {
+        state.batchSelectedParts.delete(index);
+      }
+      updateBatchActionState();
     });
     const name = document.createElement("span");
     name.textContent = part.name;
+    name.dataset.partNameIndex = String(index);
     const count = document.createElement("small");
     count.textContent = `${part.vertexCount}/${part.faceCount}`;
     const edit = document.createElement("button");
@@ -1235,9 +1375,49 @@ function populateSubmeshList(model) {
     exportButton.type = "button";
     exportButton.textContent = t("export");
     exportButton.addEventListener("click", () => exportPartGlb(index));
-    label.append(checkbox, name, count, edit, exportButton);
-    el.submeshList.append(label);
+    row.append(visibleCheckbox, editCheckbox, name, count, edit, exportButton);
+    el.submeshList.append(row);
   }
+}
+
+function createHeaderCheckboxCell(input, text) {
+  const cell = document.createElement("label");
+  cell.className = "header-check";
+  const span = document.createElement("span");
+  span.textContent = text;
+  cell.append(input, span);
+  return cell;
+}
+
+function setAllPartsVisible(visible) {
+  for (const [index, entry] of state.meshEntries.entries()) {
+    if (!entry?.mesh) continue;
+    entry.mesh.visible = visible;
+    if (state.normalVisualizers[index]) {
+      state.normalVisualizers[index].visible = visible && el.showNormals.checked;
+    }
+  }
+  populateSubmeshList(state.currentModel);
+}
+
+function setAllPartsSelected(selected) {
+  state.batchSelectedParts = selected
+    ? new Set(state.currentModel.submeshes.map((_, index) => index))
+    : new Set();
+  populateSubmeshList(state.currentModel);
+}
+
+function getSelectedPartIndices() {
+  return [...state.batchSelectedParts]
+    .filter((index) => state.meshEntries[index]?.mesh)
+    .sort((a, b) => a - b);
+}
+
+function updateBatchActionState() {
+  const hasSelection = Boolean(state.currentModel && getSelectedPartIndices().length);
+  el.exportSelectedParts.disabled = !hasSelection;
+  el.batchExportParts.disabled = !hasSelection;
+  el.batchEditToggle.disabled = !state.currentModel;
 }
 
 function openPartEditor(index) {
@@ -1246,6 +1426,7 @@ function openPartEditor(index) {
   const part = state.currentModel.submeshes[index];
   el.editorBlock.hidden = false;
   el.editorName.textContent = part.name;
+  el.editName.value = part.name;
 
   el.editMaterial.replaceChildren();
   for (const [materialIndex, material] of state.currentModel.materials.entries()) {
@@ -1281,9 +1462,7 @@ async function exportPartGlb(index) {
 
 async function exportSelectedPartsGlb() {
   if (!state.currentModel) return;
-  const indices = state.meshEntries
-    .map((entry, index) => (entry.mesh.visible ? index : -1))
-    .filter((index) => index >= 0);
+  const indices = getSelectedPartIndices();
   if (!indices.length) {
     setStatus(t("noSelectedParts"));
     return;
@@ -1291,7 +1470,25 @@ async function exportSelectedPartsGlb() {
   const baseName = state.currentModel.name.split(/[\\/]/).pop().replace(/\.[^.]+$/, "") || "model";
   const group = await createAnimatedGlbExportGroup(indices);
   const clips = await createLoadedAniClips();
-  await exportPartsGlb(indices, `${sanitizeFilename(baseName)}_selected.glb`, { group, animations: clips });
+  await exportPartsGlb(indices, `${sanitizeFilename(baseName)}_integrated.glb`, { group, animations: clips });
+}
+
+async function batchExportSelectedPartsGlb() {
+  const indices = getSelectedPartIndices();
+  if (!indices.length) {
+    setStatus(t("noSelectedParts"));
+    return;
+  }
+  const entries = [];
+  for (const index of indices) {
+    const part = state.currentModel.submeshes[index];
+    const filename = `${sanitizeFilename(part.name || `part_${index}`)}.glb`;
+    const blob = await exportPartsGlb([index], filename, { download: false });
+    if (blob) entries.push({ name: filename, data: blob });
+  }
+  const baseName = state.currentModel.name.split(/[\\/]/).pop().replace(/\.[^.]+$/, "") || "model";
+  const zip = await createZipBlob(entries);
+  downloadBlob(zip, `${sanitizeFilename(baseName)}.zip`);
 }
 
 async function exportPartsGlb(indices, filename, options = {}) {
@@ -1308,12 +1505,14 @@ async function exportPartsGlb(indices, filename, options = {}) {
     const blob = result instanceof ArrayBuffer
       ? new Blob([result], { type: "model/gltf-binary" })
       : new Blob([JSON.stringify(result)], { type: "model/gltf+json" });
-    downloadBlob(blob, filename);
+    if (options.download !== false) downloadBlob(blob, filename);
     disposeObject(group);
     setStatus(t("exported", { name: filename }));
+    return blob;
   } catch (error) {
     console.error(error);
     setStatus(t("exportFailed", { message: error.message }));
+    return null;
   }
 }
 
@@ -1494,6 +1693,62 @@ function buildTransformEditor(part) {
   }
 }
 
+function toggleBatchEditor() {
+  if (!state.currentModel) return;
+  const enabled = el.batchEditToggle.getAttribute("aria-pressed") !== "true";
+  setBatchEditToggleActive(enabled);
+  el.batchEditPanel.hidden = !enabled;
+  if (enabled) {
+    state.batchTransformMatrix.identity();
+    buildBatchTransformEditor();
+  }
+}
+
+function setBatchEditToggleActive(active) {
+  el.batchEditToggle.classList.toggle("active", active);
+  el.batchEditToggle.setAttribute("aria-pressed", active ? "true" : "false");
+}
+
+function resetBatchEditor() {
+  if (el.batchEditPanel.hidden) return;
+  setBatchTransformInputsToIdentity();
+  applyBatchEditorDelta();
+}
+
+function buildBatchTransformEditor() {
+  el.batchTransformEditor.replaceChildren();
+  const transform = {
+    position: new THREE.Vector3(),
+    rotation: new THREE.Euler(),
+    scale: new THREE.Vector3(1, 1, 1)
+  };
+  for (const control of TRANSFORM_CONTROLS) {
+    const row = document.createElement("div");
+    row.className = "transform-row";
+    const label = document.createElement("span");
+    label.textContent = control.label;
+    const range = createBatchTransformInput("range", control, transform);
+    const number = createBatchTransformInput("number", control, transform);
+    row.append(label, range, number);
+    el.batchTransformEditor.append(row);
+  }
+}
+
+function createBatchTransformInput(type, control, transform) {
+  const input = createTransformInput(type, control, transform);
+  if (control.transform === "scale") {
+    input.min = "0.01";
+    input.max = "10";
+  }
+  return input;
+}
+
+function setBatchTransformInputsToIdentity() {
+  for (const input of el.batchTransformEditor.querySelectorAll("[data-transform]")) {
+    input.value = input.dataset.transform === "scale" ? "1" : "0";
+  }
+}
+
 function buildMatrixEditor(part) {
   const grid = document.createElement("div");
   grid.className = "matrix-editor";
@@ -1534,6 +1789,22 @@ function createTransformInput(type, control, transform) {
 function applyEditorValues() {
   if (!state.currentModel || state.editIndex < 0) return;
   const part = state.currentModel.submeshes[state.editIndex];
+  const oldName = part.name;
+  const newName = normalizePartName(el.editName.value, state.editIndex);
+  part.name = newName;
+  if (oldName !== newName) {
+    const node = state.boneNodes.get(oldName);
+    if (node) {
+      state.boneNodes.delete(oldName);
+      node.name = `${newName} bone`;
+      state.boneNodes.set(newName, node);
+    }
+    const entry = state.meshEntries[state.editIndex];
+    if (entry?.mesh) entry.mesh.name = newName;
+    el.editorName.textContent = newName;
+    const nameNode = el.submeshList.querySelector(`[data-part-name-index="${state.editIndex}"]`);
+    if (nameNode) nameNode.textContent = newName;
+  }
   const previousMaterialId = part.materialId;
   part.materialId = Number(el.editMaterial.value) || 0;
   part.parentId = Number(el.editParent.value);
@@ -1552,11 +1823,134 @@ function applyEditorValues() {
   setStatus(t("updatedPart", { name: part.name }));
 }
 
+function normalizePartName(name, selfIndex = -1) {
+  const base = String(name || "").trim() || makeUniquePartName();
+  const used = new Set(state.currentModel.submeshes
+    .map((part, index) => (index === selfIndex ? "" : part.name.toLowerCase()))
+    .filter(Boolean));
+  if (!used.has(base.toLowerCase())) return base;
+  let suffix = 2;
+  while (used.has(`${base}_${suffix}`.toLowerCase())) suffix++;
+  return `${base}_${suffix}`;
+}
+
+function makeUniquePartName() {
+  const used = new Set(state.currentModel?.submeshes.map((part) => part.name.toLowerCase()) || []);
+  let index = state.currentModel?.submeshes.length || 0;
+  let name = `part_${index}`;
+  while (used.has(name.toLowerCase())) name = `part_${++index}`;
+  return name;
+}
+
 function syncTransformInputPair(source) {
   const selector = `[data-transform="${source.dataset.transform}"][data-axis="${source.dataset.axis}"]`;
   for (const input of el.transformEditor.querySelectorAll(selector)) {
     if (input !== source) input.value = source.value;
   }
+}
+
+function syncBatchTransformInputPair(source) {
+  const selector = `[data-transform="${source.dataset.transform}"][data-axis="${source.dataset.axis}"]`;
+  for (const input of el.batchTransformEditor.querySelectorAll(selector)) {
+    if (input !== source) input.value = source.value;
+  }
+}
+
+function applyBatchEditorDelta() {
+  const indices = getSelectedPartIndices();
+  if (!state.currentModel) return;
+  const next = batchInputsToRenderMatrix();
+  const previousInverse = state.batchTransformMatrix.clone().invert();
+  const delta = new THREE.Matrix4().multiplyMatrices(next, previousInverse);
+  if (el.batchGroupTransform.checked) {
+    applyGroupBatchDelta(indices, delta);
+  } else {
+    applyIndependentBatchDelta(indices, delta);
+  }
+  state.batchTransformMatrix.copy(next);
+  updateModelDerivedData();
+  if (state.editIndex >= 0) buildTransformEditor(state.currentModel.submeshes[state.editIndex]);
+}
+
+function applyIndependentBatchDelta(indices, delta) {
+  const previousPosition = new THREE.Vector3().setFromMatrixPosition(state.batchTransformMatrix);
+  const nextPosition = new THREE.Vector3().setFromMatrixPosition(batchInputsToRenderMatrix());
+  const translationDelta = nextPosition.sub(previousPosition);
+  delta.setPosition(0, 0, 0);
+  for (const index of indices) {
+    const part = state.currentModel.submeshes[index];
+    const renderMatrix = md9ArrayToRenderMatrix(part.matrix);
+    const updated = new THREE.Matrix4().multiplyMatrices(renderMatrix, delta);
+    part.matrix = renderMatrixToMd9Array(updated);
+    part.matrix[12] += translationDelta.x;
+    part.matrix[13] += translationDelta.y;
+    part.matrix[14] -= translationDelta.z;
+    syncPartBone(part);
+  }
+}
+
+function applyGroupBatchDelta(indices, delta) {
+  const selected = new Set(indices);
+  const originalLocal = state.currentModel.submeshes.map((part) => md9ArrayToRenderMatrix(part.matrix));
+  const originalWorld = new Map();
+  const actualWorld = new Map();
+  const desiredWorld = new Map();
+
+  const getOriginalWorld = (index) => {
+    if (originalWorld.has(index)) return originalWorld.get(index);
+    const part = state.currentModel.submeshes[index];
+    const parentWorld = part.parentId >= 0 ? getOriginalWorld(part.parentId) : new THREE.Matrix4();
+    const world = new THREE.Matrix4().multiplyMatrices(parentWorld, originalLocal[index]);
+    originalWorld.set(index, world);
+    return world;
+  };
+
+  const getDesiredWorld = (index) => {
+    if (desiredWorld.has(index)) return desiredWorld.get(index);
+    const world = selected.has(index)
+      ? new THREE.Matrix4().multiplyMatrices(delta, getOriginalWorld(index))
+      : getOriginalWorld(index).clone();
+    desiredWorld.set(index, world);
+    return world;
+  };
+
+  const getActualWorld = (index) => {
+    if (actualWorld.has(index)) return actualWorld.get(index);
+    if (selected.has(index)) {
+      const world = getDesiredWorld(index).clone();
+      actualWorld.set(index, world);
+      return world;
+    }
+    const part = state.currentModel.submeshes[index];
+    const parentWorld = part.parentId >= 0 ? getActualWorld(part.parentId) : new THREE.Matrix4();
+    const world = new THREE.Matrix4().multiplyMatrices(parentWorld, originalLocal[index]);
+    actualWorld.set(index, world);
+    return world;
+  };
+
+  for (const index of indices) {
+    const part = state.currentModel.submeshes[index];
+    const parentWorld = part.parentId >= 0 ? getActualWorld(part.parentId) : new THREE.Matrix4();
+    const local = new THREE.Matrix4().multiplyMatrices(parentWorld.clone().invert(), getDesiredWorld(index));
+    part.matrix = renderMatrixToMd9Array(local);
+  }
+  for (const index of indices) {
+    syncPartBone(state.currentModel.submeshes[index]);
+  }
+}
+
+function batchInputsToRenderMatrix() {
+  const position = new THREE.Vector3();
+  const rotation = new THREE.Euler();
+  const scale = new THREE.Vector3(1, 1, 1);
+  for (const input of el.batchTransformEditor.querySelectorAll("[data-input-kind='number']")) {
+    const value = Number(input.value) || 0;
+    const axis = input.dataset.axis;
+    if (input.dataset.transform === "position") position[axis] = value;
+    if (input.dataset.transform === "rotation") rotation[axis] = THREE.MathUtils.degToRad(value);
+    if (input.dataset.transform === "scale") scale[axis] = value || 1;
+  }
+  return new THREE.Matrix4().compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
 }
 
 function transformInputsToMd9Matrix() {
@@ -1652,11 +2046,130 @@ function renderMatrixToMd9Array(renderMatrix) {
   return new THREE.Matrix4().multiplyMatrices(FLIP_Z_MATRIX, renderMatrix).multiply(FLIP_Z_MATRIX).toArray();
 }
 
+function addPart() {
+  if (!state.currentModel || !state.root) return;
+  const name = makeUniqueNewPartName();
+  const parentId = state.editIndex >= 0 ? state.editIndex : -1;
+  const parentPart = state.currentModel.submeshes[parentId];
+  const size = getAveragePartSize();
+  const half = size * 0.5;
+  const cube = createCubeMeshData(half);
+  const part = {
+    name,
+    matrix: new THREE.Matrix4().identity().toArray(),
+    boundingBox: [-half, -half, -half, half, half, half],
+    localPositions: cube.positions,
+    normals: cube.normals,
+    uvs: cube.uvs,
+    indices: cube.indices,
+    materialId: 0,
+    parentId,
+    vertexCount: cube.positions.length / 3,
+    faceCount: cube.indices.length / 3,
+    bonePosition: new THREE.Vector3(),
+    worldBonePosition: parentPart?.worldBonePosition?.clone?.() || new THREE.Vector3(),
+    replacement: null
+  };
+  part.initialState = clonePartState(part);
+  state.currentModel.submeshes.push(part);
+
+  const node = new THREE.Group();
+  node.name = `${part.name} bone`;
+  node.userData.defaultPosition = new THREE.Vector3();
+  node.userData.defaultQuaternion = new THREE.Quaternion();
+  node.userData.defaultScale = new THREE.Vector3(1, 1, 1);
+  state.boneNodes.set(part.name, node);
+  (parentPart ? state.boneNodes.get(parentPart.name) : state.root)?.add(node);
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(part.localPositions, 3));
+  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(part.normals, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(part.uvs, 2));
+  geometry.setIndex(new THREE.Uint16BufferAttribute(part.indices, 1));
+  geometry.computeBoundingSphere();
+  const material = state.meshEntries[0]?.material || new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = part.name;
+  mesh.userData.part = part;
+  node.add(mesh);
+  state.meshEntries.push({ mesh, material, part });
+
+  state.editIndex = state.currentModel.submeshes.length - 1;
+  rebuildSceneHelpers();
+  updateModelDerivedData();
+  populateSubmeshList(state.currentModel);
+  openPartEditor(state.editIndex);
+}
+
+function makeUniqueNewPartName() {
+  const used = new Set(state.currentModel?.submeshes.map((part) => part.name.toLowerCase()) || []);
+  let index = 1;
+  while (used.has(`new_${index}`)) index++;
+  return `new_${index}`;
+}
+
+function getAveragePartSize() {
+  let total = 0;
+  let count = 0;
+  const size = new THREE.Vector3();
+  for (const part of state.currentModel?.submeshes || []) {
+    const box = computeArrayBox(part.localPositions);
+    if (box.isEmpty()) continue;
+    box.getSize(size);
+    const max = Math.max(size.x, size.y, size.z);
+    if (max > 0.0001) {
+      total += max;
+      count++;
+    }
+  }
+  return count ? total / count : 1;
+}
+
+function createCubeMeshData(half) {
+  const faces = [
+    [[-half, -half, half], [half, -half, half], [half, half, half], [-half, half, half], [0, 0, 1]],
+    [[half, -half, -half], [-half, -half, -half], [-half, half, -half], [half, half, -half], [0, 0, -1]],
+    [[-half, half, half], [half, half, half], [half, half, -half], [-half, half, -half], [0, 1, 0]],
+    [[-half, -half, -half], [half, -half, -half], [half, -half, half], [-half, -half, half], [0, -1, 0]],
+    [[half, -half, half], [half, -half, -half], [half, half, -half], [half, half, half], [1, 0, 0]],
+    [[-half, -half, -half], [-half, -half, half], [-half, half, half], [-half, half, -half], [-1, 0, 0]]
+  ];
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indices = [];
+  for (const face of faces) {
+    const start = positions.length / 3;
+    for (let i = 0; i < 4; i++) {
+      positions.push(...face[i]);
+      normals.push(...face[4]);
+    }
+    uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+    indices.push(start, start + 1, start + 2, start, start + 2, start + 3);
+  }
+  return {
+    positions: new Float32Array(positions),
+    normals: new Float32Array(normals),
+    uvs: new Float32Array(uvs),
+    indices: new Uint16Array(indices)
+  };
+}
+
 async function restoreEditedPart() {
   if (!state.currentModel || state.editIndex < 0) return;
   const part = state.currentModel.submeshes[state.editIndex];
+  const oldName = part.name;
   restorePartFromState(part, part.initialState);
+  if (oldName !== part.name) {
+    const node = state.boneNodes.get(oldName);
+    if (node) {
+      state.boneNodes.delete(oldName);
+      node.name = `${part.name} bone`;
+      state.boneNodes.set(part.name, node);
+    }
+  }
   const entry = state.meshEntries[state.editIndex];
+  if (entry.mesh) entry.mesh.name = part.name;
   entry.material = entry.mesh.material = await createMaterial(state.currentModel.materials[part.materialId], state.currentModel.baseDir);
   syncPartBone(part);
   updatePartGeometry(state.editIndex);
@@ -1740,6 +2253,9 @@ function deleteEditedPart() {
   state.currentModel.submeshes.splice(deleteIndex, 1);
   state.meshEntries.splice(deleteIndex, 1);
   state.boneNodes.delete(deleted.name);
+  state.batchSelectedParts = new Set([...state.batchSelectedParts]
+    .filter((index) => index !== deleteIndex)
+    .map((index) => (index > deleteIndex ? index - 1 : index)));
   for (const part of state.currentModel.submeshes) {
     if (part.parentId > deleteIndex) part.parentId--;
   }
@@ -1762,17 +2278,27 @@ async function replaceEditedPartFromFiles(files) {
     setStatus(t("replacementNeedsModel"));
     return;
   }
+  try {
+    await replacePartWithModelFiles(state.editIndex, modelFile, files);
+    populateSubmeshList(state.currentModel);
+    openPartEditor(state.editIndex);
+    setStatus(t("replacedPart", { name: state.currentModel.submeshes[state.editIndex].name, mtl: modelFile.name.toLowerCase().endsWith(".obj") && files.some((file) => file.name.toLowerCase().endsWith(".mtl")) ? t("readMtl") : "" }));
+  } catch (error) {
+    console.error(error);
+    setStatus(error.message);
+  }
+}
+
+async function replacePartWithModelFiles(partIndex, modelFile, files) {
   const textureFile = files.find((file) => isTextureFile(file.name));
   const mtlFile = files.find((file) => file.name.toLowerCase().endsWith(".mtl"));
-  const part = state.currentModel.submeshes[state.editIndex];
+  const part = state.currentModel.submeshes[partIndex];
   const replacement = await parseReplacementModel(modelFile, mtlFile, files);
   if (replacement.positions.length === 0) {
-    setStatus(t("replacementNoMesh"));
-    return;
+    throw new Error(t("replacementNoMesh"));
   }
   if (replacement.positions.length / 3 > 65535) {
-    setStatus(t("replacementTooLarge"));
-    return;
+    throw new Error(t("replacementTooLarge"));
   }
   const materialTextureFile = replacement.textureFile || (replacement.textureImage ? null : textureFile) || null;
   const materialTextureImage = replacement.textureImage || null;
@@ -1789,22 +2315,22 @@ async function replaceEditedPartFromFiles(files) {
     textureImage: materialTextureImage
   };
   if (replacement.atlasImage) {
-    const textureName = makeAtlasTextureName();
+    const textureName = makePartTextureName(part.name);
     const material = createMd9MaterialFromThree(replacement.material, textureName);
     material.atlasSourceImage = replacement.atlasImage;
     state.currentModel.materials.push(material);
     part.materialId = state.currentModel.materials.length - 1;
-    const entry = state.meshEntries[state.editIndex];
+    const entry = state.meshEntries[partIndex];
     entry.material = entry.mesh.material = replacement.previewMaterial;
   } else if (materialTextureFile || materialTextureImage) {
     if (materialTextureFile) state.textureFiles.set(textureKey(materialTextureFile.name), materialTextureFile);
-    const textureName = makeAtlasTextureName();
+    const textureName = makePartTextureName(part.name);
     const material = createMd9MaterialFromThree(replacement.material, textureName);
     material.atlasSourceFile = materialTextureFile;
     material.atlasSourceImage = materialTextureImage;
     state.currentModel.materials.push(material);
     part.materialId = state.currentModel.materials.length - 1;
-    const entry = state.meshEntries[state.editIndex];
+    const entry = state.meshEntries[partIndex];
     entry.material = entry.mesh.material = materialTextureFile
       ? await createMaterialFromFile(material, materialTextureFile)
       : clonePreviewMaterial(replacement.material);
@@ -1812,13 +2338,13 @@ async function replaceEditedPartFromFiles(files) {
     const material = createMd9MaterialFromThree(replacement.material, "");
     state.currentModel.materials.push(material);
     part.materialId = state.currentModel.materials.length - 1;
-    const entry = state.meshEntries[state.editIndex];
+    const entry = state.meshEntries[partIndex];
     entry.material = entry.mesh.material = replacement.material;
   } else {
     const material = createMd9MaterialFromThree(null, "");
     state.currentModel.materials.push(material);
     part.materialId = state.currentModel.materials.length - 1;
-    const entry = state.meshEntries[state.editIndex];
+    const entry = state.meshEntries[partIndex];
     entry.material = entry.mesh.material = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
   }
   part.localPositions = replacement.positions;
@@ -1827,11 +2353,48 @@ async function replaceEditedPartFromFiles(files) {
   part.indices = replacement.indices;
   part.vertexCount = replacement.positions.length / 3;
   part.faceCount = Math.floor(replacement.indices.length / 3);
-  updatePartGeometry(state.editIndex);
+  updatePartGeometry(partIndex);
   updateModelDerivedData();
+}
+
+async function batchReplaceSelectedPartsFromFiles(files) {
+  if (!state.currentModel) return;
+  const selected = new Set(getSelectedPartIndices());
+  if (!selected.size) {
+    setStatus(t("noSelectedParts"));
+    return;
+  }
+  const modelFiles = files.filter((file) => /\.(glb|gltf)$/i.test(file.name));
+  if (!modelFiles.length) {
+    setStatus(t("replacementNeedsModel"));
+    return;
+  }
+  const partByName = new Map();
+  for (const index of selected) {
+    partByName.set(normalizeMatchName(state.currentModel.submeshes[index].name), index);
+  }
+  let replaced = 0;
+  for (const modelFile of modelFiles) {
+    const index = partByName.get(normalizeMatchName(modelFile.name.replace(/\.[^.]+$/, "")));
+    if (index === undefined) continue;
+    try {
+      await replacePartWithModelFiles(index, modelFile, files);
+      replaced++;
+    } catch (error) {
+      console.warn(`Batch replacement skipped: ${modelFile.name}`, error);
+    }
+  }
+  if (!replaced) {
+    setStatus(t("batchReplaceNoMatch"));
+    return;
+  }
   populateSubmeshList(state.currentModel);
-  openPartEditor(state.editIndex);
-  setStatus(t("replacedPart", { name: part.name, mtl: modelFile.name.toLowerCase().endsWith(".obj") && mtlFile ? t("readMtl") : "" }));
+  if (state.editIndex >= 0) openPartEditor(state.editIndex);
+  setStatus(t("batchReplaced", { count: replaced }));
+}
+
+function normalizeMatchName(name) {
+  return String(name || "").trim().toLowerCase().replace(/\.[^.]+$/, "");
 }
 
 async function parseReplacementModel(modelFile, mtlFile, files) {
@@ -2403,7 +2966,11 @@ async function createMaterialFromFile(material, file) {
 
 function makeAtlasTextureName() {
   const base = state.currentModel?.name?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") || "model";
-  return `${base}_atlas.png`.slice(0, 31);
+  return `${base}_atlas`.slice(0, 27);
+}
+
+function makePartTextureName(partName) {
+  return normalizeMd9TextureName(partName || "texture");
 }
 
 function sanitizeFilename(name) {
@@ -2464,9 +3031,15 @@ function clearModels() {
   state.currentMd9Id = "";
   state.missingTextures = new Set();
   state.editIndex = -1;
+  state.batchSelectedParts = new Set();
   el.saveModel.disabled = true;
+  el.addPart.disabled = true;
   el.exportSelectedParts.disabled = true;
+  el.batchExportParts.disabled = true;
+  el.batchEditToggle.disabled = true;
   el.editorBlock.hidden = true;
+  el.batchEditPanel.hidden = true;
+  setBatchEditToggleActive(false);
   el.submeshList.replaceChildren();
   updateStatsEmpty();
   updateModelSelect();
@@ -2801,11 +3374,17 @@ async function saveCurrentModel() {
   if (!state.currentModel) return;
   const saveSnapshot = captureSaveMutationSnapshot(state.currentModel);
   try {
-    await bakeReplacementAtlas(state.currentModel);
+    const zipEntries = [];
+    await bakeReplacementAtlas(state.currentModel, zipEntries);
     const md9 = serializeMd9(createBakedModelForSave(state.currentModel));
-    const baseName = state.currentModel.name.split(/[\\/]/).pop().replace(/\.[^.]+$/, "") || "model";
-    downloadBlob(new Blob([md9], { type: "application/octet-stream" }), `${baseName}_edited.md9`);
-    setStatus(t("savedMd9", { name: `${baseName}_edited.md9` }));
+    const originalName = state.currentModel.name.split(/[\\/]/).pop() || "model.md9";
+    const defaultBaseName = originalName.replace(/\.[^.]+$/, "") || "model";
+    const baseName = normalizeModelBaseName(window.prompt(t("modelNamePrompt"), defaultBaseName) || defaultBaseName);
+    zipEntries.unshift({ name: `${baseName}.md9`, data: new Blob([md9], { type: "application/octet-stream" }) });
+    zipEntries.push(...getSaveDependencyEntries(state.currentModel, zipEntries));
+    const zip = await createZipBlob(zipEntries);
+    downloadBlob(zip, `${sanitizeFilename(baseName)}.zip`);
+    setStatus(t("savedMd9", { name: `${baseName}.zip` }));
   } catch (error) {
     console.error(error);
     setStatus(t("saveFailed", { message: error.message }));
@@ -2814,7 +3393,12 @@ async function saveCurrentModel() {
   }
 }
 
+function normalizeModelBaseName(name) {
+  return sanitizeFilename(String(name || "model").replace(/\.md9$/i, "").trim() || "model");
+}
+
 function createBakedModelForSave(model) {
+  const context = createBakeHierarchyContext(model);
   return {
     ...model,
     materials: model.materials.map((material) => ({
@@ -2825,29 +3409,53 @@ function createBakedModelForSave(model) {
       emissive: [...material.emissive],
       extra: material.extra ? [...material.extra] : []
     })),
-    submeshes: model.submeshes.map(createBakedPartForSave)
+    submeshes: model.submeshes.map((part, index) => createBakedPartForSave(part, index, context))
   };
 }
 
-function createBakedPartForSave(part) {
-  const renderMatrix = md9ArrayToRenderMatrix(part.matrix);
-  const position = new THREE.Vector3();
-  const linearMatrix = renderMatrix.clone();
-  position.setFromMatrixPosition(renderMatrix);
-  linearMatrix.setPosition(0, 0, 0);
+function createBakeHierarchyContext(model) {
+  const localMatrices = model.submeshes.map((part) => md9ArrayToRenderMatrix(part.matrix));
+  const worldMatrices = new Map();
+  const savedWorldPositions = new Map();
+  const getWorldMatrix = (index) => {
+    if (worldMatrices.has(index)) return worldMatrices.get(index);
+    const part = model.submeshes[index];
+    const parentWorld = part.parentId >= 0 ? getWorldMatrix(part.parentId) : new THREE.Matrix4();
+    const world = new THREE.Matrix4().multiplyMatrices(parentWorld, localMatrices[index]);
+    worldMatrices.set(index, world);
+    return world;
+  };
+  const getSavedWorldPosition = (index) => {
+    if (savedWorldPositions.has(index)) return savedWorldPositions.get(index);
+    const position = new THREE.Vector3().setFromMatrixPosition(getWorldMatrix(index));
+    savedWorldPositions.set(index, position);
+    return position;
+  };
+  return { getWorldMatrix, getSavedWorldPosition };
+}
+
+function createBakedPartForSave(part, index, context) {
+  const worldMatrix = context.getWorldMatrix(index);
+  const savedWorldPosition = context.getSavedWorldPosition(index);
+  const parentSavedWorldPosition = part.parentId >= 0
+    ? context.getSavedWorldPosition(part.parentId)
+    : new THREE.Vector3();
+  const savedLocalPosition = savedWorldPosition.clone().sub(parentSavedWorldPosition);
 
   const bakedPositions = new Float32Array(part.localPositions.length);
   const point = new THREE.Vector3();
   const box = new THREE.Box3();
   for (let i = 0; i < part.localPositions.length; i += 3) {
-    point.set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2]).applyMatrix4(linearMatrix);
+    point.set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2])
+      .applyMatrix4(worldMatrix)
+      .sub(savedWorldPosition);
     bakedPositions[i] = point.x;
     bakedPositions[i + 1] = point.y;
     bakedPositions[i + 2] = point.z;
     box.expandByPoint(point);
   }
 
-  const normalMatrix = new THREE.Matrix3().getNormalMatrix(linearMatrix);
+  const normalMatrix = new THREE.Matrix3().getNormalMatrix(worldMatrix);
   const bakedNormals = new Float32Array(part.normals.length);
   const normal = new THREE.Vector3();
   for (let i = 0; i < part.normals.length; i += 3) {
@@ -2857,7 +3465,7 @@ function createBakedPartForSave(part) {
     bakedNormals[i + 2] = normal.z;
   }
 
-  const identityLinearMatrix = new THREE.Matrix4().makeTranslation(position.x, position.y, position.z);
+  const identityLinearMatrix = new THREE.Matrix4().makeTranslation(savedLocalPosition.x, savedLocalPosition.y, savedLocalPosition.z);
   return {
     ...part,
     matrix: renderMatrixToMd9Array(identityLinearMatrix),
@@ -2888,6 +3496,181 @@ function captureSaveMutationSnapshot(model) {
   };
 }
 
+function getSaveDependencyEntries(model, existingEntries) {
+  const existing = new Set(existingEntries.map((entry) => textureKey(entry.name)));
+  const entries = [];
+  for (const material of model.materials) {
+    if (!material.textureName) continue;
+    const key = textureKey(material.textureName);
+    if (existing.has(key)) continue;
+    const file = state.textureFiles.get(key);
+    if (!file) continue;
+    entries.push({ name: material.textureName, data: file });
+    existing.add(key);
+  }
+  return entries;
+}
+
+async function createZipBlob(entries) {
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  const usedNames = new Map();
+  for (const entry of entries) {
+    const nameBytes = encoder.encode(makeUniqueZipPath(entry.name, usedNames));
+    const dataBytes = new Uint8Array(await blobLikeToArrayBuffer(entry.data));
+    const crc = crc32(dataBytes);
+    const local = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, 0, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, dataBytes.length, true);
+    localView.setUint32(22, dataBytes.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    local.set(nameBytes, 30);
+    chunks.push(local, dataBytes);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, 0, true);
+    centralView.setUint32(16, crc, true);
+    centralView.setUint32(20, dataBytes.length, true);
+    centralView.setUint32(24, dataBytes.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+    central.push(centralHeader);
+    offset += local.length + dataBytes.length;
+  }
+
+  const centralOffset = offset;
+  let centralSize = 0;
+  for (const chunk of central) {
+    chunks.push(chunk);
+    centralSize += chunk.length;
+  }
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(8, entries.length, true);
+  endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, centralOffset, true);
+  chunks.push(end);
+  return new Blob(chunks, { type: "application/zip" });
+}
+
+async function unzipFile(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const eocdOffset = findZipEndOfCentralDirectory(bytes);
+  if (eocdOffset < 0) return [];
+  const entryCount = view.getUint16(eocdOffset + 10, true);
+  let offset = view.getUint32(eocdOffset + 16, true);
+  const files = [];
+  for (let i = 0; i < entryCount; i++) {
+    if (view.getUint32(offset, true) !== 0x02014b50) break;
+    const method = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const uncompressedSize = view.getUint32(offset + 24, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localOffset = view.getUint32(offset + 42, true);
+    const name = new TextDecoder().decode(bytes.slice(offset + 46, offset + 46 + nameLength));
+    offset += 46 + nameLength + extraLength + commentLength;
+    if (!name || name.endsWith("/")) continue;
+
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const compressed = bytes.slice(dataStart, dataStart + compressedSize);
+    const data = method === 0
+      ? compressed
+      : method === 8
+        ? await inflateRaw(compressed)
+        : null;
+    if (!data) continue;
+    const safeName = name.split(/[\\/]/).pop();
+    files.push(new File([data.slice(0, uncompressedSize)], safeName, { lastModified: file.lastModified }));
+  }
+  return files;
+}
+
+async function unpackPakFile(file) {
+  const entries = readPakFromBuffer(await file.arrayBuffer(), { fileNameEncoding: "gbk", cacheData: false });
+  const files = [];
+  for (const entry of entries) {
+    if (entry.isDirectory) continue;
+    const safeName = String(entry.name || "").split(/[\\/]/).pop();
+    if (!safeName) continue;
+    files.push(new File([entry.data], safeName, { lastModified: file.lastModified }));
+  }
+  return files;
+}
+
+function findZipEndOfCentralDirectory(bytes) {
+  for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65557); offset--) {
+    if (bytes[offset] === 0x50 && bytes[offset + 1] === 0x4b && bytes[offset + 2] === 0x05 && bytes[offset + 3] === 0x06) {
+      return offset;
+    }
+  }
+  return -1;
+}
+
+async function inflateRaw(bytes) {
+  if (typeof DecompressionStream === "undefined") return null;
+  try {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch (error) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+}
+
+async function blobLikeToArrayBuffer(value) {
+  if (value instanceof ArrayBuffer) return value;
+  if (ArrayBuffer.isView(value)) return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+  if (value instanceof Blob) return value.arrayBuffer();
+  return new Blob([value]).arrayBuffer();
+}
+
+function normalizeZipPath(path) {
+  return String(path || "file").replace(/^[\\/]+/, "").replace(/\\/g, "/");
+}
+
+function makeUniqueZipPath(path, usedNames) {
+  const normalized = normalizeZipPath(path);
+  const lower = normalized.toLowerCase();
+  const count = usedNames.get(lower) || 0;
+  usedNames.set(lower, count + 1);
+  if (!count) return normalized;
+  const slash = normalized.lastIndexOf("/");
+  const dir = slash >= 0 ? normalized.slice(0, slash + 1) : "";
+  const file = slash >= 0 ? normalized.slice(slash + 1) : normalized;
+  const dot = file.lastIndexOf(".");
+  const stem = dot > 0 ? file.slice(0, dot) : file;
+  const ext = dot > 0 ? file.slice(dot) : "";
+  return `${dir}${stem}_${count + 1}${ext}`;
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 function restoreSaveMutationSnapshot(model, snapshot) {
   if (!model || !snapshot) return;
   for (const [index, uvs] of snapshot.uvs.entries()) {
@@ -2907,52 +3690,129 @@ function restoreSaveMutationSnapshot(model, snapshot) {
   updateModelDerivedData();
 }
 
-async function bakeReplacementAtlas(model) {
-  const materials = model.materials.filter((material) => material.atlasSourceFile || material.atlasSourceImage);
-  if (!materials.length) return;
-  const atlasName = makeAtlasTextureName();
-  const prebuilt = materials.length === 1 && isCanvasLike(materials[0].atlasSourceImage);
-  if (prebuilt) {
-    const textureName = await downloadTextureAndAskName(materials[0].atlasSourceImage, atlasName);
-    materials[0].textureName = textureName;
-    return;
-  }
-
-  const sources = materials.map((material) => ({
-    key: `save:${model.materials.indexOf(material)}`,
-    material,
-    file: material.atlasSourceFile || null,
-    image: material.atlasSourceImage || null
-  }));
-  const atlas = await buildTextureAtlas(sources);
-  for (const source of sources) {
-    if (!source.material.atlasBaked) {
-      remapUvsForMaterial(model, model.materials.indexOf(source.material), source, atlas.canvas.width, atlas.canvas.height);
-      source.material.atlasBaked = true;
+async function bakeReplacementAtlas(model, zipEntries = null) {
+  const handled = new Set();
+  for (const part of model.submeshes) {
+    const material = model.materials[part.materialId];
+    if (!material || handled.has(material)) continue;
+    if (!material.atlasSourceFile && !material.atlasSourceImage) continue;
+    handled.add(material);
+    const textureName = makePartTextureName(part.name);
+    const canvas = isCanvasLike(material.atlasSourceImage)
+      ? material.atlasSourceImage
+      : (await buildTextureAtlas([{
+          key: `save:${part.name}`,
+          material,
+          file: material.atlasSourceFile || null,
+          image: material.atlasSourceImage || null
+        }])).canvas;
+    material.textureName = textureName;
+    if (zipEntries) {
+      zipEntries.push({ name: textureName, data: await canvasToDxt3DdsBlob(canvas) });
+    } else {
+      downloadBlob(await canvasToDxt3DdsBlob(canvas), textureName);
     }
-  }
-  const textureName = await downloadTextureAndAskName(atlas.canvas, atlasName);
-  for (const source of sources) {
-    source.material.textureName = textureName;
   }
 }
 
 async function downloadCanvasPng(canvas, filename) {
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) throw new Error(t("pngEncodeFailed"));
-  downloadBlob(blob, filename);
+  downloadBlob(await canvasToPngBlob(canvas), filename);
 }
 
 async function downloadTextureAndAskName(canvas, defaultName) {
-  await downloadCanvasPng(canvas, defaultName);
   const chosen = window.prompt(t("textureNamePrompt"), defaultName);
-  return normalizeMd9TextureName(chosen || defaultName);
+  const textureName = normalizeMd9TextureName(chosen || defaultName);
+  downloadBlob(await canvasToDxt3DdsBlob(canvas), textureName);
+  return textureName;
+}
+
+async function collectTextureAndAskName(canvas, defaultName, zipEntries) {
+  if (!zipEntries) return downloadTextureAndAskName(canvas, defaultName);
+  const chosen = window.prompt(t("textureNamePrompt"), defaultName);
+  const textureName = normalizeMd9TextureName(chosen || defaultName);
+  zipEntries.push({ name: textureName, data: await canvasToDxt3DdsBlob(canvas) });
+  return textureName;
+}
+
+async function canvasToPngBlob(canvas) {
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error(t("pngEncodeFailed"));
+  return blob;
 }
 
 function normalizeMd9TextureName(name) {
-  const cleaned = String(name || "texture.png").split(/[\\/]/).pop().trim() || "texture.png";
-  const withExt = /\.[a-z0-9]+$/i.test(cleaned) ? cleaned : `${cleaned}.png`;
-  return withExt.slice(0, 31);
+  const cleaned = String(name || "texture").split(/[\\/]/).pop().trim().replace(/\.dds$/i, "") || "texture";
+  return `${cleaned.slice(0, 27)}.dds`;
+}
+
+async function canvasToDxt3DdsBlob(canvas) {
+  const squish = await getSquish();
+  const width = (canvas.width + 3) & ~3;
+  const height = (canvas.height + 3) & ~3;
+  const padded = document.createElement("canvas");
+  padded.width = width;
+  padded.height = height;
+  const ctx = padded.getContext("2d", { alpha: true, willReadFrequently: true });
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(canvas, 0, 0);
+  const rgba = new Uint8Array(ctx.getImageData(0, 0, width, height).data.buffer);
+  const compressed = compressDxt3(rgba, width, height, squish);
+  return createDdsBlob(width, height, compressed);
+}
+
+function getSquish() {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const wait = () => {
+      const squish = window.Module;
+      if (squish?.cwrap && squish?._malloc && squish?._free) {
+        resolve({
+          module: squish,
+          getStorageRequirements: squish.cwrap("GetStorageRequirements", "number", ["number", "number", "number"]),
+          compressImage: squish.cwrap("CompressImage", "void", ["number", "number", "number", "number", "number"])
+        });
+        return;
+      }
+      if (Date.now() - started > 10000) {
+        reject(new Error("DDS encoder is not ready"));
+        return;
+      }
+      setTimeout(wait, 50);
+    };
+    wait();
+  });
+}
+
+function compressDxt3(rgba, width, height, squish) {
+  const flags = 1 << 1;
+  const source = squish.module._malloc(rgba.length);
+  squish.module.HEAPU8.set(rgba, source);
+  const targetSize = squish.getStorageRequirements(width, height, flags);
+  const target = squish.module._malloc(targetSize);
+  squish.compressImage(source, width, height, target, flags);
+  const output = new Uint8Array(squish.module.HEAPU8.buffer, target, targetSize).slice();
+  squish.module._free(source);
+  squish.module._free(target);
+  return output;
+}
+
+function createDdsBlob(width, height, compressedData) {
+  const headerSize = 128;
+  const buffer = new ArrayBuffer(headerSize + compressedData.length);
+  const view = new DataView(buffer);
+  view.setUint32(0, 0x20534444, true);
+  view.setUint32(4, 124, true);
+  view.setUint32(8, 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000, true);
+  view.setUint32(12, height, true);
+  view.setUint32(16, width, true);
+  view.setUint32(20, compressedData.length, true);
+  view.setUint32(28, 1, true);
+  view.setUint32(76, 32, true);
+  view.setUint32(80, 0x4, true);
+  view.setUint32(84, 0x33545844, true);
+  view.setUint32(108, 0x1000, true);
+  new Uint8Array(buffer).set(compressedData, headerSize);
+  return new Blob([buffer], { type: "application/octet-stream" });
 }
 
 function remapUvsForMaterial(model, materialId, source, atlasWidth, atlasHeight) {
@@ -3054,7 +3914,10 @@ function serializeMd9(model) {
 }
 
 async function loadImageBitmapSource(source) {
-  if (source instanceof File || source instanceof Blob) return loadImageBitmap(source);
+  if (source instanceof File || source instanceof Blob) {
+    if (source.name?.toLowerCase().endsWith(".dds")) return decodeDdsToCanvas(await source.arrayBuffer());
+    return loadImageBitmap(source);
+  }
   if (typeof ImageBitmap !== "undefined" && source instanceof ImageBitmap) return source;
   if (typeof HTMLCanvasElement !== "undefined" && source instanceof HTMLCanvasElement) return source;
   if (typeof HTMLImageElement !== "undefined" && source instanceof HTMLImageElement) return source;
@@ -3063,9 +3926,6 @@ async function loadImageBitmapSource(source) {
 }
 
 async function loadImageBitmap(file) {
-  if (file.name.toLowerCase().endsWith(".dds")) {
-    throw new Error(t("ddsPngUnsupported"));
-  }
   if ("createImageBitmap" in window) return createImageBitmap(file);
   const url = URL.createObjectURL(file);
   state.objectUrls.push(url);

@@ -14,6 +14,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body,
 #app {
@@ -30,7 +34,7 @@ body,
 
 #app {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 380px;
 }
 
 #viewport {
@@ -58,9 +62,26 @@ body,
   top: 12px;
   left: 12px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
   z-index: 5;
+}
+
+.contact-text {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: rgb(36 42 49 / 86%);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.viewport-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .help-button {
@@ -154,7 +175,8 @@ label,
 select,
 button,
 .file-button,
-input[type="number"] {
+input[type="number"],
+input[type="text"] {
   min-height: 36px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -164,7 +186,8 @@ input[type="number"] {
 }
 
 select,
-input[type="number"] {
+input[type="number"],
+input[type="text"] {
   width: 100%;
   padding: 0 10px;
 }
@@ -218,7 +241,6 @@ button:disabled {
 }
 
 .switches label,
-.submesh-list label,
 .missing-list div {
   display: flex;
   align-items: center;
@@ -272,18 +294,49 @@ input[type="checkbox"] {
   gap: 8px;
 }
 
+.submesh-head-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .submesh-head button {
   min-height: 30px;
   padding: 0 10px;
   font-size: 12px;
 }
 
-.submesh-list label {
+.submesh-row {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(90px, 1fr) 64px 56px 56px;
+  align-items: center;
+  gap: 8px;
+}
+
+.submesh-row > input[type="checkbox"] {
+  justify-self: center;
+}
+
+.submesh-list .submesh-row:not(.submesh-table-head) {
   justify-content: stretch;
-  gap: 10px;
   border-radius: 6px;
   padding: 4px 6px;
   background: #15191e;
+}
+
+.submesh-table-head {
+  padding: 0 6px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.submesh-table-head .header-check {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
 }
 
 .submesh-list span {
@@ -295,7 +348,7 @@ input[type="checkbox"] {
 
 .submesh-list button {
   min-height: 28px;
-  padding: 0 8px;
+  padding: 0 10px;
   font-size: 12px;
 }
 
@@ -332,6 +385,59 @@ input[type="checkbox"] {
 .editor-actions button {
   min-height: 32px;
   padding: 0 8px;
+}
+
+.batch-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.batch-actions button,
+.compact-file-button {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.compact-file-button {
+  display: inline-grid;
+  place-items: center;
+  text-align: center;
+  border-color: transparent;
+  background: var(--accent);
+  color: #07110f;
+  font-weight: 750;
+}
+
+.batch-actions #batchEditToggle {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.batch-actions #batchEditToggle.active {
+  border-color: transparent;
+  background: var(--accent);
+  color: #07110f;
+}
+
+.batch-edit-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.batch-edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.batch-edit-head button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .edit-grid {

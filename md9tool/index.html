@@ -18,18 +18,21 @@
     <main id="app">
       <section id="viewport" aria-label="MD9 viewport">
         <div class="viewport-tools">
-          <button id="helpButton" class="icon-button help-button" type="button" title="Help" aria-label="Help">?</button>
-          <div id="languageButtons" class="language-buttons" role="group" aria-label="Language">
-            <button type="button" data-language="en" class="active">EN</button>
-            <button type="button" data-language="zh">ZH</button>
-            <button type="button" data-language="es">ES</button>
+          <div class="contact-text">交流QQ群: 1094233945</div>
+          <div class="viewport-tool-row">
+            <button id="helpButton" class="icon-button help-button" type="button" title="Help" aria-label="Help">?</button>
+            <div id="languageButtons" class="language-buttons" role="group" aria-label="Language">
+              <button type="button" data-language="en" class="active">EN</button>
+              <button type="button" data-language="zh">ZH</button>
+              <button type="button" data-language="es">ES</button>
+            </div>
           </div>
         </div>
       </section>
       <aside id="panel">
         <div class="panel-block">
           <label class="file-button">
-            <input id="fileInput" type="file" accept=".md9,.ani,.obj,.mtl,.glb,.gltf,.bin,.dds,.png,.jpg,.jpeg,.webp" multiple />
+            <input id="fileInput" type="file" accept=".zip,.pak,.md9,.ani,.obj,.mtl,.glb,.gltf,.bin,.dds,.png,.jpg,.jpeg,.webp" multiple />
             <span data-i18n="openFiles">Open MD9 / ANI / model / textures</span>
           </label>
           <label class="file-button">
@@ -97,7 +100,28 @@
         <div class="panel-block">
           <div class="submesh-head">
             <div class="submesh-title" data-i18n="parts">Parts</div>
-            <button id="exportSelectedParts" type="button" disabled data-i18n="exportSelected">Export selected</button>
+            <div class="submesh-head-actions">
+              <button id="addPart" type="button" disabled data-i18n="addPart">Add part</button>
+              <button id="exportSelectedParts" type="button" disabled data-i18n="exportIntegrated">Export integrated</button>
+            </div>
+          </div>
+          <div class="batch-actions">
+            <button id="batchExportParts" type="button" disabled data-i18n="batchExport">Batch export</button>
+            <label class="file-button compact-file-button">
+              <input id="batchReplaceInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.dds" multiple />
+              <span data-i18n="batchReplace">Batch replace</span>
+            </label>
+            <button id="batchEditToggle" type="button" disabled aria-pressed="false" data-i18n="batchEdit">Batch edit</button>
+          </div>
+          <div id="batchEditPanel" class="batch-edit-panel" hidden>
+            <div class="batch-edit-head">
+              <label class="switch-row">
+                <input id="batchGroupTransform" type="checkbox" />
+                <span data-i18n="groupTransform">Group transform</span>
+              </label>
+              <button id="batchEditReset" type="button" data-i18n="reset">Reset</button>
+            </div>
+            <div id="batchTransformEditor" class="transform-editor"></div>
           </div>
           <div id="submeshList" class="submesh-list"></div>
         </div>
@@ -116,6 +140,8 @@
           </div>
 
           <div class="edit-grid">
+            <label for="editName" data-i18n="partName">Name</label>
+            <input id="editName" type="text" />
             <label for="editMaterial" data-i18n="material">Material</label>
             <select id="editMaterial"></select>
             <label for="editParent" data-i18n="parentPart">Parent</label>
@@ -148,6 +174,7 @@
         <pre id="helpContent">Loading...</pre>
       </dialog>
     </main>
+    <script src="./src/squish.js"></script>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
