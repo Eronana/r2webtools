@@ -861,8 +861,18 @@ function parseMd9(buffer, name, baseDir) {
     headers.push({ partName, matrix, vertexCount, faceCount, materialId, parentId, boundingBox });
   }
 
-  const totalVertices = readInt();
-  const totalFaces = readInt();
+  const declaredTotalVertices = readInt();
+  const declaredTotalFaces = readInt();
+  const headerTotalVertices = headers.reduce((sum, header) => sum + header.vertexCount, 0);
+  const headerTotalFaces = headers.reduce((sum, header) => sum + header.faceCount, 0);
+  const totalVertices = headerTotalVertices || declaredTotalVertices;
+  const totalFaces = headerTotalFaces || declaredTotalFaces;
+  if (declaredTotalVertices !== totalVertices || declaredTotalFaces !== totalFaces) {
+    console.warn(
+      `MD9 count mismatch in ${name}: declared vertices/faces ${declaredTotalVertices}/${declaredTotalFaces}, `
+      + `header vertices/faces ${headerTotalVertices}/${headerTotalFaces}. Using header counts.`
+    );
+  }
   const initialPositions = headers.map((_, index) => {
     const position = new THREE.Vector3();
     let parentId = index;
@@ -937,7 +947,7 @@ function parseMd9(buffer, name, baseDir) {
     indexCursor += indexCount;
   }
 
-  if (vertexCursor !== totalVertices || indexCursor !== allIndices.length) {
+  if (vertexCursor !== headerTotalVertices || indexCursor !== allIndices.length) {
     throw new Error(t("md9CountMismatch"));
   }
 
