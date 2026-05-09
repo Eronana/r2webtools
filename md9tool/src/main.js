@@ -4267,7 +4267,7 @@ function makeAtlasTextureName() {
 
 function makePartTextureName(partName) {
   const base = String(partName || "texture");
-  return normalizeMd9TextureName(base.toLowerCase().startsWith("nocull_") ? base : `nocull_${base}`);
+  return normalizeMd9TextureName(base.toLowerCase().startsWith("Nocull_") ? base : `Nocull_${base}`);
 }
 
 function sanitizeFilename(name) {
