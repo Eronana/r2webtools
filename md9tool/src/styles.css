@@ -640,19 +640,33 @@ input[type="checkbox"] {
 }
 
 .missing-list div {
-  min-height: 26px;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 54px;
+  min-height: 30px;
+  align-items: center;
   border-radius: 6px;
-  background: #211d15;
-  color: var(--warn);
+  background: #15191e;
+  color: var(--text);
   padding: 4px 6px;
   font-size: 12px;
 }
 
-.missing-list span {
+.missing-list .missing-texture-row {
+  background: #211d15;
+  color: var(--warn);
+}
+
+.missing-list span,
+.missing-list small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.missing-list input {
+  min-height: 24px;
+  padding: 0 7px;
+  font-size: 12px;
 }
 
 #status {

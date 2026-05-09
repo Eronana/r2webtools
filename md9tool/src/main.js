@@ -150,7 +150,7 @@ const I18N = {
     redo: "Redo",
     connections: "Links",
     filterParts: "Filter",
-    missingTextures: "Missing textures",
+    missingTextures: "Texture list",
     textures: "Textures",
     wireframe: "Wireframe",
     skeleton: "Skeleton",
@@ -245,6 +245,7 @@ const I18N = {
     animationsCleared: "Animations cleared",
     noModelLoaded: "No model loaded",
     texturesComplete: "All texture files are present",
+    textureMissing: "Missing",
     dropOrOpen: "Drop or open",
     savedMd9: "Saved {name}",
     saveFailed: "Save failed: {message}",
@@ -273,7 +274,7 @@ const I18N = {
     redo: "重做",
     connections: "连接",
     filterParts: "过滤",
-    missingTextures: "缺失贴图",
+    missingTextures: "贴图列表",
     textures: "贴图",
     wireframe: "线框",
     skeleton: "骨骼",
@@ -368,6 +369,7 @@ const I18N = {
     animationsCleared: "已清空动画",
     noModelLoaded: "尚未加载模型",
     texturesComplete: "贴图文件完整",
+    textureMissing: "缺失",
     dropOrOpen: "拖入或打开",
     savedMd9: "已保存 {name}",
     saveFailed: "保存失败: {message}",
@@ -396,7 +398,7 @@ const I18N = {
     redo: "Rehacer",
     connections: "Enlaces",
     filterParts: "Filtrar",
-    missingTextures: "Texturas faltantes",
+    missingTextures: "Lista texturas",
     textures: "Texturas",
     wireframe: "Malla",
     skeleton: "Esqueleto",
@@ -491,6 +493,7 @@ const I18N = {
     animationsCleared: "Animaciones limpiadas",
     noModelLoaded: "No hay modelo cargado",
     texturesComplete: "Todas las texturas estan presentes",
+    textureMissing: "Falta",
     dropOrOpen: "Soltar o abrir",
     savedMd9: "Guardado {name}",
     saveFailed: "Error al guardar: {message}",
@@ -3318,7 +3321,7 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
   let previewTexture = null;
   if (textureSources.length) {
     const atlas = await buildTextureAtlas(textureSources);
-    material = createMd9MaterialFromThree(null, normalizeMd9TextureName(modelFile.name.replace(/\.[^.]+$/, "")), null, { newFormat: true });
+    material = createMd9MaterialFromThree(null, makePartTextureName(modelFile.name.replace(/\.[^.]+$/, "")), null, { newFormat: true });
     material.atlasSourceImage = atlas.canvas;
     material.atlasHasAlpha = atlas.hasAlpha;
     for (const ref of activeVertexRefs) {
@@ -4263,7 +4266,8 @@ function makeAtlasTextureName() {
 }
 
 function makePartTextureName(partName) {
-  return normalizeMd9TextureName(partName || "texture");
+  const base = String(partName || "texture");
+  return normalizeMd9TextureName(base.toLowerCase().startsWith("nocull_") ? base : `nocull_${base}`);
 }
 
 function sanitizeFilename(name) {
@@ -4388,23 +4392,76 @@ function updateMissingTextures(model) {
     el.missingTextures.append(row);
     return;
   }
-  if (state.missingTextures.size === 0) {
+  if (!model.materials.length) {
     const row = document.createElement("div");
     const name = document.createElement("span");
-    name.textContent = t("texturesComplete");
+    name.textContent = t("noTexture");
     row.append(name);
     el.missingTextures.append(row);
     return;
   }
-  for (const textureName of state.missingTextures) {
+  for (const [materialIndex, material] of model.materials.entries()) {
     const row = document.createElement("div");
-    const name = document.createElement("span");
-    name.textContent = textureName;
-    const hint = document.createElement("small");
-    hint.textContent = t("dropOrOpen");
-    row.append(name, hint);
+    row.className = state.missingTextures.has(material.textureName) ? "missing-texture-row" : "";
+    const id = document.createElement("small");
+    id.textContent = String(materialIndex);
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = material.textureName || "";
+    input.placeholder = t("noTexture");
+    input.addEventListener("change", () => renameMaterialTexture(materialIndex, input.value));
+    const status = document.createElement("small");
+    status.textContent = material.textureName && state.missingTextures.has(material.textureName)
+      ? t("textureMissing")
+      : "";
+    row.append(id, input, status);
     el.missingTextures.append(row);
   }
+}
+
+function renameMaterialTexture(materialIndex, value) {
+  const material = state.currentModel?.materials[materialIndex];
+  if (!material) return;
+  pushUndoSnapshot();
+  const oldTextureName = material.textureName || "";
+  const newTextureName = value.trim() ? normalizeMd9TextureName(value) : "";
+  if (oldTextureName && newTextureName && oldTextureName !== newTextureName) {
+    renameLoadedTextureResource(oldTextureName, newTextureName, materialIndex);
+  }
+  material.textureName = newTextureName;
+  updateMissingTextures(state.currentModel);
+  if (state.editIndex >= 0) openPartEditor(state.editIndex);
+}
+
+function renameLoadedTextureResource(oldTextureName, newTextureName, materialIndex) {
+  const match = findCompatibleTexture(oldTextureName);
+  if (!match) return;
+  const newKey = textureKey(newTextureName);
+  const renamed = match.fileOrUrl instanceof File
+    ? new File([match.fileOrUrl], newTextureName, {
+        type: match.fileOrUrl.type || "application/octet-stream",
+        lastModified: match.fileOrUrl.lastModified
+      })
+    : match.fileOrUrl;
+  state.textureFiles.set(newKey, renamed);
+
+  const oldKeys = [
+    textureKey(oldTextureName),
+    textureKey(match.name)
+  ];
+  for (const oldKey of oldKeys) {
+    if (oldKey === newKey || !state.textureFiles.has(oldKey)) continue;
+    if (!isTextureKeyUsedByOtherMaterial(oldKey, materialIndex)) state.textureFiles.delete(oldKey);
+  }
+}
+
+function isTextureKeyUsedByOtherMaterial(key, excludeMaterialIndex) {
+  const base = textureBaseKey(key);
+  return state.currentModel?.materials.some((material, index) => (
+    index !== excludeMaterialIndex
+      && material.textureName
+      && (textureKey(material.textureName) === key || textureBaseKey(material.textureName) === base)
+  )) || false;
 }
 
 function collectMissingTextures(model) {
