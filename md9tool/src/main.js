@@ -37,6 +37,7 @@ const el = {
   frameLabel: document.querySelector("#frameLabel"),
   missingBlock: document.querySelector("#missingBlock"),
   missingTextures: document.querySelector("#missingTextures"),
+  textureAddInput: document.querySelector("#textureAddInput"),
   showTextures: document.querySelector("#showTextures"),
   showWireframe: document.querySelector("#showWireframe"),
   showSkeleton: document.querySelector("#showSkeleton"),
@@ -155,6 +156,10 @@ const I18N = {
     connections: "Links",
     filterParts: "Filter",
     missingTextures: "Texture list",
+    addTexture: "Add",
+    deleteTexture: "Delete",
+    textureAdded: "Added {count} textures",
+    textureDeleted: "Texture deleted",
     textures: "Textures",
     wireframe: "Wireframe",
     skeleton: "Skeleton",
@@ -282,6 +287,10 @@ const I18N = {
     connections: "连接",
     filterParts: "过滤",
     missingTextures: "贴图列表",
+    addTexture: "添加",
+    deleteTexture: "删除",
+    textureAdded: "已添加 {count} 个贴图",
+    textureDeleted: "已删除贴图",
     textures: "贴图",
     wireframe: "线框",
     skeleton: "骨骼",
@@ -409,6 +418,10 @@ const I18N = {
     connections: "Enlaces",
     filterParts: "Filtrar",
     missingTextures: "Lista texturas",
+    addTexture: "Agregar",
+    deleteTexture: "Borrar",
+    textureAdded: "{count} texturas agregadas",
+    textureDeleted: "Textura borrada",
     textures: "Texturas",
     wireframe: "Malla",
     skeleton: "Esqueleto",
@@ -599,6 +612,10 @@ el.scaleModelHeight.addEventListener("click", scaleCurrentModelToHeight);
 el.resetModelPosition.addEventListener("click", resetCurrentModelPosition);
 el.undoEdit.addEventListener("click", undoEdit);
 el.redoEdit.addEventListener("click", redoEdit);
+el.textureAddInput.addEventListener("change", async () => {
+  await addTextureMaterials([...el.textureAddInput.files]);
+  el.textureAddInput.value = "";
+});
 el.partFilter.addEventListener("input", () => {
   if (state.currentModel) populateSubmeshList(state.currentModel);
 });
@@ -672,6 +689,7 @@ installPanelResize();
 installCameraKeyboardControls();
 installViewportPicking();
 installDropHandlers();
+populateEditorForNoSelection();
 setEditorEnabled(false);
 updateHistoryButtons();
 resize();
@@ -727,7 +745,13 @@ function setLanguage(language) {
     populateSubmeshList(state.currentModel);
     updateMissingTextures(state.currentModel);
     if (state.editIndex >= 0) openPartEditor(state.editIndex);
+    else {
+      populateEditorForNoSelection();
+      setEditorEnabled(false);
+    }
   } else {
+    populateEditorForNoSelection();
+    setEditorEnabled(false);
     updateMissingTextures(null);
   }
   if (el.helpDialog.open) showHelpDialog();
@@ -820,6 +844,7 @@ function resetOpenedFiles() {
   el.exportSelectedParts.disabled = true;
   el.batchExportParts.disabled = true;
   el.batchEditToggle.disabled = true;
+  populateEditorForNoSelection();
   setEditorEnabled(false);
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
@@ -922,6 +947,7 @@ async function showModel(model, label) {
   el.addPart.disabled = false;
   el.duplicatePart.disabled = true;
   el.deletePart.disabled = true;
+  populateEditorForNoSelection();
   setEditorEnabled(false);
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
@@ -1869,6 +1895,7 @@ function clearHighlightedPart() {
   el.duplicatePart.disabled = true;
   el.deletePart.disabled = true;
   state.editIndex = -1;
+  populateEditorForNoSelection();
   setEditorEnabled(false);
 }
 
@@ -1877,15 +1904,59 @@ function setEditorEnabled(enabled) {
   for (const control of el.editorBlock.querySelectorAll("input, select, button")) {
     control.disabled = !enabled;
   }
-  if (!enabled) {
-    el.editorName.textContent = "-";
-    el.editName.value = "";
-    el.editMaterial.replaceChildren();
-    el.editParent.replaceChildren();
-    el.transformEditor.replaceChildren();
-    el.keepWorldOnParentChange.checked = true;
-    el.matrixMode.checked = false;
+}
+
+function populateEditorForNoSelection() {
+  el.editorName.textContent = "-";
+  el.editName.value = "";
+  populateEditorMaterialOptions(-1);
+  populateEditorParentOptions(-1);
+  el.keepWorldOnParentChange.checked = true;
+  buildTransformEditor(createEmptyEditorPart());
+}
+
+function createEmptyEditorPart() {
+  return {
+    matrix: new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
+    materialId: 0,
+    parentId: -1
+  };
+}
+
+function populateEditorMaterialOptions(selectedMaterialId) {
+  el.editMaterial.replaceChildren();
+  const materials = state.currentModel?.materials || [];
+  if (!materials.length) {
+    const option = document.createElement("option");
+    option.value = "0";
+    option.textContent = `0: ${t("noTexture")}`;
+    el.editMaterial.append(option);
+    return;
   }
+  for (const [materialIndex, material] of materials.entries()) {
+    const option = document.createElement("option");
+    option.value = String(materialIndex);
+    option.textContent = `${materialIndex}: ${material.textureName || t("noTexture")}`;
+    el.editMaterial.append(option);
+  }
+  el.editMaterial.value = String(Math.max(0, selectedMaterialId));
+}
+
+function populateEditorParentOptions(editIndex) {
+  el.editParent.replaceChildren();
+  const rootOption = document.createElement("option");
+  rootOption.value = "-1";
+  rootOption.textContent = `-1: ${t("rootNode")}`;
+  el.editParent.append(rootOption);
+  const parts = state.currentModel?.submeshes || [];
+  for (const [partIndex, candidate] of parts.entries()) {
+    if (partIndex === editIndex) continue;
+    const option = document.createElement("option");
+    option.value = String(partIndex);
+    option.textContent = `${partIndex}: ${candidate.name}`;
+    el.editParent.append(option);
+  }
+  el.editParent.value = "-1";
 }
 
 function restoreHighlightedMaterial() {
@@ -2038,27 +2109,10 @@ function openPartEditor(index) {
   el.editorName.textContent = part.name;
   el.editName.value = part.name;
 
-  el.editMaterial.replaceChildren();
-  for (const [materialIndex, material] of state.currentModel.materials.entries()) {
-    const option = document.createElement("option");
-    option.value = String(materialIndex);
-    option.textContent = `${materialIndex}: ${material.textureName || t("noTexture")}`;
-    el.editMaterial.append(option);
-  }
+  populateEditorMaterialOptions(part.materialId);
   el.editMaterial.value = String(part.materialId);
 
-  el.editParent.replaceChildren();
-  const rootOption = document.createElement("option");
-  rootOption.value = "-1";
-  rootOption.textContent = `-1: ${t("rootNode")}`;
-  el.editParent.append(rootOption);
-  for (const [partIndex, candidate] of state.currentModel.submeshes.entries()) {
-    if (partIndex === index) continue;
-    const option = document.createElement("option");
-    option.value = String(partIndex);
-    option.textContent = `${partIndex}: ${candidate.name}`;
-    el.editParent.append(option);
-  }
+  populateEditorParentOptions(index);
   el.editParent.value = String(part.parentId);
   el.keepWorldOnParentChange.checked = true;
 
@@ -2976,6 +3030,7 @@ function deleteEditedPart() {
   }
 
   state.editIndex = -1;
+  populateEditorForNoSelection();
   setEditorEnabled(false);
   rebuildSceneHelpers();
   updateModelDerivedData();
@@ -4728,6 +4783,7 @@ function clearModels() {
   el.exportSelectedParts.disabled = true;
   el.batchExportParts.disabled = true;
   el.batchEditToggle.disabled = true;
+  populateEditorForNoSelection();
   setEditorEnabled(false);
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
@@ -4800,23 +4856,90 @@ function updateMissingTextures(model) {
     status.textContent = material.textureName && state.missingTextures.has(material.textureName)
       ? t("textureMissing")
       : "";
-    row.append(id, input, status);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.textContent = t("deleteTexture");
+    deleteButton.addEventListener("click", () => deleteMaterialTexture(materialIndex));
+    row.append(id, input, status, deleteButton);
     el.missingTextures.append(row);
   }
 }
 
-function renameMaterialTexture(materialIndex, value) {
+async function renameMaterialTexture(materialIndex, value) {
   const material = state.currentModel?.materials[materialIndex];
   if (!material) return;
-  pushUndoSnapshot();
   const oldTextureName = material.textureName || "";
   const newTextureName = value.trim() ? normalizeMd9TextureName(value) : "";
+  if (oldTextureName === newTextureName) {
+    updateMissingTextures(state.currentModel);
+    return;
+  }
+  pushUndoSnapshot();
   if (oldTextureName && newTextureName && oldTextureName !== newTextureName) {
     renameLoadedTextureResource(oldTextureName, newTextureName, materialIndex);
   }
   material.textureName = newTextureName;
-  updateMissingTextures(state.currentModel);
-  if (state.editIndex >= 0) openPartEditor(state.editIndex);
+  if (oldTextureName && !newTextureName) removeLoadedTextureResourceIfUnused(oldTextureName);
+  await refreshCurrentModelView();
+}
+
+async function addTextureMaterials(files) {
+  if (!state.currentModel || !files.length) return;
+  const textureFiles = files.filter((file) => isTextureFile(file.name));
+  if (!textureFiles.length) return;
+  pushUndoSnapshot();
+  for (const file of textureFiles) {
+    state.textureFiles.set(textureKey(file.webkitRelativePath || file.name), file);
+    state.currentModel.materials.push(createMd9MaterialFromThree(null, normalizeMd9TextureName(file.name)));
+  }
+  await refreshCurrentModelView();
+  setStatus(t("textureAdded", { count: textureFiles.length }));
+}
+
+async function deleteMaterialTexture(materialIndex) {
+  const model = state.currentModel;
+  const material = model?.materials?.[materialIndex];
+  if (!material) return;
+  pushUndoSnapshot();
+  const oldTextureName = material.textureName || "";
+  if (model.materials.length <= 1) {
+    model.materials = [createMd9MaterialFromThree(null, "")];
+    for (const part of model.submeshes) part.materialId = 0;
+  } else {
+    model.materials.splice(materialIndex, 1);
+    for (const part of model.submeshes) {
+      if (part.materialId === materialIndex) {
+        part.materialId = 0;
+      } else if (part.materialId > materialIndex) {
+        part.materialId--;
+      }
+    }
+  }
+  removeLoadedTextureResourceIfUnused(oldTextureName, materialIndex);
+  await refreshCurrentModelView();
+  setStatus(t("textureDeleted"));
+}
+
+async function refreshCurrentModelView() {
+  const model = state.currentModel;
+  if (!model) return;
+  const editIndex = state.editIndex;
+  const highlightedIndex = state.highlightedPartIndex;
+  const batchSelected = new Set(state.batchSelectedParts);
+  state.restoringHistory = true;
+  try {
+    await showModel(model, model.name);
+  } finally {
+    state.restoringHistory = false;
+  }
+  state.batchSelectedParts = new Set([...batchSelected].filter((index) => model.submeshes[index]));
+  populateSubmeshList(model);
+  if (highlightedIndex >= 0 && model.submeshes[highlightedIndex]) {
+    setHighlightedPart(highlightedIndex);
+  }
+  if (editIndex >= 0 && model.submeshes[editIndex]) {
+    openPartEditor(editIndex);
+  }
 }
 
 function renameLoadedTextureResource(oldTextureName, newTextureName, materialIndex) {
@@ -4841,11 +4964,30 @@ function renameLoadedTextureResource(oldTextureName, newTextureName, materialInd
   }
 }
 
+function removeLoadedTextureResourceIfUnused(textureName) {
+  if (!textureName) return;
+  const match = findCompatibleTexture(textureName);
+  if (!match) return;
+  const keys = new Set([textureKey(textureName), textureKey(match.name)]);
+  for (const key of keys) {
+    if (!state.textureFiles.has(key)) continue;
+    if (!isTextureKeyUsedByAnyMaterial(key)) state.textureFiles.delete(key);
+  }
+}
+
 function isTextureKeyUsedByOtherMaterial(key, excludeMaterialIndex) {
   const base = textureBaseKey(key);
   return state.currentModel?.materials.some((material, index) => (
     index !== excludeMaterialIndex
       && material.textureName
+      && (textureKey(material.textureName) === key || textureBaseKey(material.textureName) === base)
+  )) || false;
+}
+
+function isTextureKeyUsedByAnyMaterial(key) {
+  const base = textureBaseKey(key);
+  return state.currentModel?.materials.some((material) => (
+    material.textureName
       && (textureKey(material.textureName) === key || textureBaseKey(material.textureName) === base)
   )) || false;
 }
