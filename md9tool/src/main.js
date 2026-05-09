@@ -10,6 +10,9 @@ import { readPakFromBuffer } from "./pak.js";
 const el = {
   app: document.querySelector("#app"),
   viewport: document.querySelector("#viewport"),
+  panelResizer: document.querySelector("#panelResizer"),
+  highlightInfo: document.querySelector("#highlightInfo"),
+  meshNameOverlay: document.querySelector("#meshNameOverlay"),
   helpButton: document.querySelector("#helpButton"),
   helpDialog: document.querySelector("#helpDialog"),
   helpClose: document.querySelector("#helpClose"),
@@ -17,6 +20,9 @@ const el = {
   languageButtons: document.querySelector("#languageButtons"),
   fileInput: document.querySelector("#fileInput"),
   folderInput: document.querySelector("#folderInput"),
+  skinImportInput: document.querySelector("#skinImportInput"),
+  skinVertexMode: document.querySelector("#skinVertexMode"),
+  skinFaceMode: document.querySelector("#skinFaceMode"),
   saveModel: document.querySelector("#saveModel"),
   modelSelect: document.querySelector("#modelSelect"),
   animationSelect: document.querySelector("#animationSelect"),
@@ -30,6 +36,12 @@ const el = {
   showTextures: document.querySelector("#showTextures"),
   showWireframe: document.querySelector("#showWireframe"),
   showSkeleton: document.querySelector("#showSkeleton"),
+  showMeshNames: document.querySelector("#showMeshNames"),
+  targetModelHeight: document.querySelector("#targetModelHeight"),
+  scaleModelHeight: document.querySelector("#scaleModelHeight"),
+  resetModelPosition: document.querySelector("#resetModelPosition"),
+  undoEdit: document.querySelector("#undoEdit"),
+  redoEdit: document.querySelector("#redoEdit"),
   showNormals: document.querySelector("#showNormals"),
   showBounds: document.querySelector("#showBounds"),
   showGrid: document.querySelector("#showGrid"),
@@ -45,6 +57,7 @@ const el = {
   batchEditPanel: document.querySelector("#batchEditPanel"),
   batchTransformEditor: document.querySelector("#batchTransformEditor"),
   submeshList: document.querySelector("#submeshList"),
+  partFilter: document.querySelector("#partFilter"),
   editorBlock: document.querySelector("#editorBlock"),
   editorName: document.querySelector("#editorName"),
   restorePart: document.querySelector("#restorePart"),
@@ -53,6 +66,7 @@ const el = {
   editName: document.querySelector("#editName"),
   editMaterial: document.querySelector("#editMaterial"),
   editParent: document.querySelector("#editParent"),
+  keepWorldOnParentChange: document.querySelector("#keepWorldOnParentChange"),
   matrixMode: document.querySelector("#matrixMode"),
   transformEditor: document.querySelector("#transformEditor"),
   replaceMeshInput: document.querySelector("#replaceMeshInput"),
@@ -90,7 +104,7 @@ const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
 keyLight.position.set(80, 150, 110);
 scene.add(keyLight);
 
-const grid = new THREE.GridHelper(220, 22, 0x3a4652, 0x242b33);
+const grid = new THREE.GridHelper(2200, 22, 0x3a4652, 0x242b33);
 scene.add(grid);
 
 const ddsLoader = new DDSLoader();
@@ -114,6 +128,9 @@ const SQUISH_DXT3 = 1 << 1;
 const SQUISH_COLOUR_METRIC_UNIFORM = 1 << 6;
 const SQUISH_WEIGHT_COLOUR_BY_ALPHA = 1 << 7;
 const SQUISH_COLOUR_ITERATIVE_CLUSTER_FIT = 1 << 8;
+const PANEL_WIDTH_STORAGE_KEY = "md9tool.panelWidth";
+const MIN_PANEL_WIDTH = 340;
+const MAX_PANEL_WIDTH = 760;
 const I18N = {
   en: {
     openFiles: "Open MD9 / ANI / model / textures",
@@ -125,10 +142,19 @@ const I18N = {
     currentAnimation: "Current animation",
     defaultPose: "Default pose",
     autoPlay: "Auto play",
+    globalOptions: "Global options",
+    targetHeight: "Target height",
+    scaleToHeight: "Scale",
+    resetPosition: "Reset position",
+    undo: "Undo",
+    redo: "Redo",
+    connections: "Links",
+    filterParts: "Filter",
     missingTextures: "Missing textures",
     textures: "Textures",
     wireframe: "Wireframe",
     skeleton: "Skeleton",
+    meshNames: "Mesh names",
     normals: "Normals",
     bounds: "Bounds",
     grid: "Grid",
@@ -144,6 +170,15 @@ const I18N = {
     exportIntegrated: "Export GLB",
     addPart: "Add part",
     duplicatePart: "Duplicate",
+    importSkinnedGltf: "Import skinned GLB / GLTF",
+    vertexOwner: "Vertex",
+    faceOwner: "Triangle",
+    ownerMaxWeight: "Max weight",
+    ownerFirstWeight: "First weight",
+    faceMaxTotalWeight: "Max total weight",
+    faceMajorityVertex: "Vertex majority",
+    faceFirstVertex: "First vertex",
+    importGltfButton: "Import GLB / GLTF as MD9",
     partName: "Name",
     batchExport: "Export ZIP",
     batchReplace: "Batch Replace",
@@ -160,6 +195,7 @@ const I18N = {
     deletePart: "Delete part",
     material: "Material",
     parentPart: "Parent",
+    keepWorldPosition: "Keep position",
     transform: "Transform",
     matrixMode: "Matrix",
     replaceModel: "Replace OBJ / GLB / GLTF",
@@ -181,7 +217,15 @@ const I18N = {
     clearedMesh: "Cleared part {name} with a tiny triangle",
     cannotDeleteLast: "Cannot delete the last part",
     deletedPart: "Deleted part {name}",
-    selectPartFirst: "Click a part's Edit button first",
+    selectPartFirst: "Select a part first",
+    invalidHeight: "Enter a valid target height",
+    scaledModelHeight: "Scaled model height to {height}",
+    resetModelPositionDone: "Reset model position",
+    undoDone: "Undone",
+    redoDone: "Redone",
+    importedSkinnedGltf: "Imported {name} as MD9 with {parts} bone parts",
+    importNeedsGltf: "Import needs a glb or gltf file",
+    importNeedsSkin: "No skinned mesh with bones found",
     replacementNeedsModel: "Replacement needs an obj, glb, or gltf file",
     replacementNoMesh: "Replacement failed: no usable mesh in the model",
     replacementTooLarge: "Replacement failed: one part has more than 65535 vertices",
@@ -221,10 +265,19 @@ const I18N = {
     currentAnimation: "当前动画",
     defaultPose: "默认姿势",
     autoPlay: "自动播放",
+    globalOptions: "全局选项",
+    targetHeight: "目标高度",
+    scaleToHeight: "缩放",
+    resetPosition: "重置位置",
+    undo: "撤销",
+    redo: "重做",
+    connections: "连接",
+    filterParts: "过滤",
     missingTextures: "缺失贴图",
     textures: "贴图",
     wireframe: "线框",
     skeleton: "骨骼",
+    meshNames: "显示 Mesh 名称",
     normals: "法线",
     bounds: "包围盒",
     grid: "网格",
@@ -240,6 +293,15 @@ const I18N = {
     exportIntegrated: "整合导出",
     addPart: "添加部件",
     duplicatePart: "复制部件",
+    importSkinnedGltf: "导入蒙皮 GLB / GLTF",
+    vertexOwner: "顶点",
+    faceOwner: "三角面",
+    ownerMaxWeight: "最大权重",
+    ownerFirstWeight: "首个权重",
+    faceMaxTotalWeight: "权重总和最大",
+    faceMajorityVertex: "顶点多数",
+    faceFirstVertex: "首顶点",
+    importGltfButton: "导入 GLB / GLTF 为 MD9",
     partName: "名称",
     batchExport: "批量导出",
     batchReplace: "批量替换",
@@ -256,6 +318,7 @@ const I18N = {
     deletePart: "删除部件",
     material: "材质",
     parentPart: "父部件",
+    keepWorldPosition: "保持位置",
     transform: "变换",
     matrixMode: "矩阵",
     replaceModel: "替换 OBJ / GLB / GLTF",
@@ -277,7 +340,15 @@ const I18N = {
     clearedMesh: "已用极小三角形清空部件 {name}",
     cannotDeleteLast: "不能删除最后一个部件",
     deletedPart: "已删除部件 {name}",
-    selectPartFirst: "请先点击某个部件的编辑按钮",
+    selectPartFirst: "请先选择一个部件",
+    invalidHeight: "请输入有效的目标高度",
+    scaledModelHeight: "已将模型高度缩放到 {height}",
+    resetModelPositionDone: "已重置模型位置",
+    undoDone: "已撤销",
+    redoDone: "已重做",
+    importedSkinnedGltf: "已将 {name} 导入为 MD9，共 {parts} 个骨骼部件",
+    importNeedsGltf: "导入需要 glb 或 gltf 文件",
+    importNeedsSkin: "没有找到带骨骼的蒙皮 mesh",
     replacementNeedsModel: "替换部件需要 obj、glb 或 gltf 文件",
     replacementNoMesh: "替换失败: 模型中没有可用 mesh",
     replacementTooLarge: "替换失败: 单个部件顶点数超过 65535",
@@ -317,10 +388,19 @@ const I18N = {
     currentAnimation: "Animacion actual",
     defaultPose: "Pose predeterminada",
     autoPlay: "Reproduccion automatica",
+    globalOptions: "Opciones globales",
+    targetHeight: "Altura obj.",
+    scaleToHeight: "Escalar",
+    resetPosition: "Restablecer pos.",
+    undo: "Deshacer",
+    redo: "Rehacer",
+    connections: "Enlaces",
+    filterParts: "Filtrar",
     missingTextures: "Texturas faltantes",
     textures: "Texturas",
     wireframe: "Malla",
     skeleton: "Esqueleto",
+    meshNames: "Nombres mesh",
     normals: "Normales",
     bounds: "Caja",
     grid: "Cuadricula",
@@ -336,6 +416,15 @@ const I18N = {
     exportIntegrated: "Exportar GLB",
     addPart: "Agregar parte",
     duplicatePart: "Duplicar",
+    importSkinnedGltf: "Importar GLB / GLTF con skin",
+    vertexOwner: "Vertice",
+    faceOwner: "Triangulo",
+    ownerMaxWeight: "Peso max.",
+    ownerFirstWeight: "Primer peso",
+    faceMaxTotalWeight: "Peso total max.",
+    faceMajorityVertex: "Mayoria vert.",
+    faceFirstVertex: "Primer vert.",
+    importGltfButton: "Importar GLB / GLTF a MD9",
     partName: "Nombre",
     batchExport: "Exportar ZIP",
     batchReplace: "Reempl. lote",
@@ -352,6 +441,7 @@ const I18N = {
     deletePart: "Eliminar parte",
     material: "Material",
     parentPart: "Padre",
+    keepWorldPosition: "Mantener pos.",
     transform: "Transformacion",
     matrixMode: "Matriz",
     replaceModel: "Reemplazar OBJ / GLB / GLTF",
@@ -373,7 +463,15 @@ const I18N = {
     clearedMesh: "Parte {name} limpiada con un triangulo diminuto",
     cannotDeleteLast: "No se puede eliminar la ultima parte",
     deletedPart: "Parte eliminada {name}",
-    selectPartFirst: "Primero haz clic en Editar en una parte",
+    selectPartFirst: "Selecciona una parte primero",
+    invalidHeight: "Introduce una altura valida",
+    scaledModelHeight: "Modelo escalado a altura {height}",
+    resetModelPositionDone: "Posicion del modelo restablecida",
+    undoDone: "Deshecho",
+    redoDone: "Rehecho",
+    importedSkinnedGltf: "Importado {name} como MD9 con {parts} partes de hueso",
+    importNeedsGltf: "La importacion necesita un archivo glb o gltf",
+    importNeedsSkin: "No se encontro mesh con skin y huesos",
     replacementNeedsModel: "El reemplazo necesita un archivo obj, glb o gltf",
     replacementNoMesh: "Fallo el reemplazo: el modelo no tiene mesh usable",
     replacementTooLarge: "Fallo el reemplazo: una parte supera 65535 vertices",
@@ -438,6 +536,9 @@ const state = {
   highlightedPartIndex: -1,
   highlightedMaterial: null,
   highlightedHelper: null,
+  meshNameLabels: [],
+  cameraKeys: new Set(),
+  lastFrameTime: performance.now(),
   textureFiles: new Map(),
   objectUrls: [],
   currentModel: null,
@@ -448,6 +549,9 @@ const state = {
   animationFrame: 0,
   batchTransformMatrix: new THREE.Matrix4(),
   batchSelectedParts: new Set(),
+  undoStack: [],
+  redoStack: [],
+  restoringHistory: false,
   boneNodes: new Map(),
   missingTextures: new Set()
 };
@@ -466,11 +570,22 @@ el.folderInput.addEventListener("change", () => {
   addFiles([...el.folderInput.files]);
   el.folderInput.value = "";
 });
+el.skinImportInput.addEventListener("change", async () => {
+  await importSkinnedGltfFiles([...el.skinImportInput.files]);
+  el.skinImportInput.value = "";
+});
 el.modelSelect.addEventListener("change", () => loadSelectedModel(el.modelSelect.value));
 el.animationSelect.addEventListener("change", () => loadSelectedAnimation(el.animationSelect.value));
 el.clearModels.addEventListener("click", clearModels);
 el.clearAnimations.addEventListener("click", clearAnimations);
 el.saveModel.addEventListener("click", saveCurrentModel);
+el.scaleModelHeight.addEventListener("click", scaleCurrentModelToHeight);
+el.resetModelPosition.addEventListener("click", resetCurrentModelPosition);
+el.undoEdit.addEventListener("click", undoEdit);
+el.redoEdit.addEventListener("click", redoEdit);
+el.partFilter.addEventListener("input", () => {
+  if (state.currentModel) populateSubmeshList(state.currentModel);
+});
 el.addPart.addEventListener("click", addPart);
 el.duplicatePart.addEventListener("click", duplicateHighlightedPart);
 el.exportSelectedParts.addEventListener("click", exportSelectedPartsGlb);
@@ -511,6 +626,7 @@ for (const input of [
   el.showTextures,
   el.showWireframe,
   el.showSkeleton,
+  el.showMeshNames,
   el.showNormals,
   el.showBounds,
   el.showGrid,
@@ -535,8 +651,13 @@ el.batchEditPanel.addEventListener("input", (event) => {
 const resizeObserver = new ResizeObserver(resize);
 resizeObserver.observe(el.viewport);
 window.addEventListener("resize", resize);
+restorePanelWidth();
+installPanelResize();
+installCameraKeyboardControls();
 installViewportPicking();
 installDropHandlers();
+setEditorEnabled(false);
+updateHistoryButtons();
 resize();
 setLanguage(detectInitialLanguage());
 animate();
@@ -576,6 +697,9 @@ function setLanguage(language) {
   }
   for (const node of document.querySelectorAll("[data-i18n]")) {
     node.textContent = t(node.dataset.i18n);
+  }
+  for (const node of document.querySelectorAll("[data-i18n-placeholder]")) {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
   }
   el.helpButton.title = t("helpTitle");
   el.helpButton.setAttribute("aria-label", t("helpTitle"));
@@ -665,21 +789,29 @@ function resetOpenedFiles() {
   state.currentAnimation = null;
   state.currentAniId = "";
   state.missingTextures = new Set();
+  state.undoStack = [];
+  state.redoStack = [];
   state.editIndex = -1;
   state.batchSelectedParts = new Set();
   el.saveModel.disabled = true;
+  el.scaleModelHeight.disabled = true;
+  el.resetModelPosition.disabled = true;
+  el.partFilter.disabled = true;
+  el.partFilter.value = "";
   el.addPart.disabled = true;
   el.duplicatePart.disabled = true;
+  el.deletePart.disabled = true;
   el.exportSelectedParts.disabled = true;
   el.batchExportParts.disabled = true;
   el.batchEditToggle.disabled = true;
-  el.editorBlock.hidden = true;
+  setEditorEnabled(false);
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
   el.submeshList.replaceChildren();
   updateModelSelect();
   updateAnimationSelect();
   updateMissingTextures(null);
+  updateHistoryButtons();
 }
 
 function addMd9File(file) {
@@ -719,7 +851,7 @@ async function loadSelectedModel(id) {
   el.modelSelect.value = id;
   setStatus(t("loadingModel", { name: item.label }));
   try {
-    const model = parseMd9(await item.file.arrayBuffer(), item.label, "");
+    const model = item.model || parseMd9(await item.file.arrayBuffer(), item.label, "");
     await showModel(model, item.label);
     if (state.currentAnimation) applyAnimation(0);
   } catch (error) {
@@ -763,12 +895,21 @@ async function showModel(model, label) {
   state.editIndex = -1;
   state.highlightedPartIndex = -1;
   state.batchSelectedParts = new Set();
+  if (!state.restoringHistory) {
+    state.undoStack = [];
+    state.redoStack = [];
+  }
   el.saveModel.disabled = false;
+  el.scaleModelHeight.disabled = false;
+  el.resetModelPosition.disabled = false;
+  el.partFilter.disabled = false;
   el.addPart.disabled = false;
   el.duplicatePart.disabled = true;
-  el.editorBlock.hidden = true;
+  el.deletePart.disabled = true;
+  setEditorEnabled(false);
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
+  updateHistoryButtons();
   state.root = new THREE.Group();
   state.root.name = model.name;
   scene.add(state.root);
@@ -800,10 +941,12 @@ async function showModel(model, label) {
   state.bounds = new THREE.Box3Helper(model.bounds, 0xe5b85b);
   state.root.add(state.bounds);
 
+  rebuildMeshNameLabels();
   populateSubmeshList(model);
   updateStats(model, label);
   frameModel(model.bounds);
   applyOptions();
+  updateHighlightInfo();
   updateMissingTextures(model);
   setStatus(t("modelLoaded", { name: label }));
 }
@@ -979,6 +1122,95 @@ function clonePartState(part) {
   };
 }
 
+function cloneModelSnapshot(model) {
+  return {
+    name: model.name,
+    baseDir: model.baseDir,
+    newFormat: model.newFormat,
+    materials: model.materials.map(cloneMaterialState),
+    submeshes: model.submeshes.map(clonePartForSnapshot),
+    generatedAnimations: model.generatedAnimations || [],
+    highlightedPartIndex: state.highlightedPartIndex,
+    batchSelectedParts: [...state.batchSelectedParts]
+  };
+}
+
+function cloneMaterialState(material) {
+  return {
+    ...material,
+    diffuse: material.diffuse ? [...material.diffuse] : [1, 1, 1, 1],
+    ambient: material.ambient ? [...material.ambient] : [0, 0, 0, 1],
+    specular: material.specular ? [...material.specular] : [0, 0, 0, 1],
+    emissive: material.emissive ? [...material.emissive] : [0, 0, 0, 1],
+    extra: material.extra ? [...material.extra] : undefined
+  };
+}
+
+function clonePartForSnapshot(part) {
+  const clone = {
+    ...clonePartState(part),
+    bonePosition: part.bonePosition?.clone?.() || new THREE.Vector3(),
+    worldBonePosition: part.worldBonePosition?.clone?.() || new THREE.Vector3(),
+    replacement: part.replacement ? { ...part.replacement } : null
+  };
+  clone.initialState = part.initialState ? clonePartState(part.initialState) : clonePartState(part);
+  return clone;
+}
+
+function pushUndoSnapshot() {
+  if (!state.currentModel || state.restoringHistory) return;
+  state.undoStack.push(cloneModelSnapshot(state.currentModel));
+  if (state.undoStack.length > 60) state.undoStack.shift();
+  state.redoStack = [];
+  updateHistoryButtons();
+}
+
+async function undoEdit() {
+  if (!state.undoStack.length || !state.currentModel) return;
+  state.redoStack.push(cloneModelSnapshot(state.currentModel));
+  const snapshot = state.undoStack.pop();
+  await restoreModelSnapshot(snapshot);
+  setStatus(t("undoDone"));
+}
+
+async function redoEdit() {
+  if (!state.redoStack.length || !state.currentModel) return;
+  state.undoStack.push(cloneModelSnapshot(state.currentModel));
+  const snapshot = state.redoStack.pop();
+  await restoreModelSnapshot(snapshot);
+  setStatus(t("redoDone"));
+}
+
+async function restoreModelSnapshot(snapshot) {
+  state.restoringHistory = true;
+  try {
+    const model = state.currentModel;
+    model.name = snapshot.name;
+    model.baseDir = snapshot.baseDir;
+    model.newFormat = snapshot.newFormat;
+    model.materials = snapshot.materials.map(cloneMaterialState);
+    model.submeshes = snapshot.submeshes.map(clonePartForSnapshot);
+    model.generatedAnimations = snapshot.generatedAnimations || [];
+    updateGeneratedModelCounts(model);
+    await showModel(model, model.name);
+    state.batchSelectedParts = new Set(snapshot.batchSelectedParts || []);
+    populateSubmeshList(model);
+    if (snapshot.highlightedPartIndex >= 0 && model.submeshes[snapshot.highlightedPartIndex]) {
+      setHighlightedPart(snapshot.highlightedPartIndex);
+    } else {
+      clearHighlightedPart();
+    }
+  } finally {
+    state.restoringHistory = false;
+    updateHistoryButtons();
+  }
+}
+
+function updateHistoryButtons() {
+  el.undoEdit.disabled = !state.currentModel || !state.undoStack.length;
+  el.redoEdit.disabled = !state.currentModel || !state.redoStack.length;
+}
+
 function makeLocalPositions(positions, origin) {
   const local = new Float32Array(positions.length);
   for (let i = 0; i < positions.length; i += 3) {
@@ -1044,6 +1276,58 @@ function parseAni(buffer, name) {
   return { name, duration, tracks };
 }
 
+function serializeAni(animation) {
+  const tracks = [...animation.tracks.values()];
+  let byteLength = 8;
+  for (const track of tracks) {
+    byteLength += 1 + Math.min(255, track.boneName.length) + 12;
+    byteLength += track.positions.length * 16;
+    byteLength += track.rotations.length * 20;
+    byteLength += track.scales.length * 16;
+  }
+  const buffer = new ArrayBuffer(byteLength);
+  const view = new DataView(buffer);
+  let offset = 0;
+  const writeInt = (value) => {
+    view.setInt32(offset, value, true);
+    offset += 4;
+  };
+  const writeFloat = (value) => {
+    view.setFloat32(offset, value, true);
+    offset += 4;
+  };
+  writeInt(tracks.length);
+  writeFloat(animation.duration || 0);
+  for (const track of tracks) {
+    const name = String(track.boneName || "").slice(0, 255);
+    view.setUint8(offset++, name.length);
+    for (let i = 0; i < name.length; i++) view.setUint8(offset++, name.charCodeAt(i) & 0x7f);
+    writeInt(track.positions.length);
+    writeInt(track.rotations.length);
+    writeInt(track.scales.length);
+    for (const key of track.positions) {
+      writeFloat(key.time);
+      writeFloat(key.value.x);
+      writeFloat(key.value.y);
+      writeFloat(-key.value.z);
+    }
+    for (const key of track.rotations) {
+      writeFloat(key.time);
+      writeFloat(-key.value.x);
+      writeFloat(-key.value.y);
+      writeFloat(key.value.z);
+      writeFloat(key.value.w);
+    }
+    for (const key of track.scales) {
+      writeFloat(key.time);
+      writeFloat(key.value.x);
+      writeFloat(key.value.y);
+      writeFloat(key.value.z);
+    }
+  }
+  return buffer;
+}
+
 function convertQuaternion(x, y, z, w) {
   return new THREE.Quaternion(-x, -y, z, w).normalize();
 }
@@ -1062,6 +1346,22 @@ async function createMaterial(material, baseDir) {
   };
   const threeMaterial = new THREE.MeshBasicMaterial(params);
   threeMaterial.name = material.textureName || "Material";
+
+  if (material.atlasSourceImage) {
+    const texture = new THREE.CanvasTexture(material.atlasSourceImage);
+    texture.name = material.textureName || "";
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.flipY = false;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.needsUpdate = true;
+    texture.userData.hasAlpha = material.atlasHasAlpha || false;
+    threeMaterial.map = texture;
+    threeMaterial.userData.baseMap = texture;
+    threeMaterial.color.set(0xffffff);
+    applyTextureAlphaToMaterial(threeMaterial, texture);
+    return threeMaterial;
+  }
 
   const resolvedTexture = resolveTextureUrl(material.textureName, baseDir);
   if (resolvedTexture) {
@@ -1402,28 +1702,70 @@ function createBoneNodes(model) {
   }
 }
 
+function rebuildMeshNameLabels() {
+  state.meshNameLabels = [];
+  el.meshNameOverlay.replaceChildren();
+  if (!state.currentModel) return;
+  for (const [index, part] of state.currentModel.submeshes.entries()) {
+    const label = document.createElement("div");
+    label.className = "mesh-name-label";
+    label.dataset.partIndex = String(index);
+    label.textContent = part.name;
+    el.meshNameOverlay.append(label);
+    state.meshNameLabels.push({ label, partIndex: index });
+  }
+  updateMeshNameLabels();
+}
+
+function updateMeshNameLabels() {
+  if (!state.currentModel || !el.showMeshNames.checked) return;
+  const rect = el.viewport.getBoundingClientRect();
+  const world = new THREE.Vector3();
+  const projected = new THREE.Vector3();
+  for (const entry of state.meshNameLabels) {
+    const part = state.currentModel.submeshes[entry.partIndex];
+    const node = part ? state.boneNodes.get(part.name) : null;
+    if (!part || !node) {
+      entry.label.hidden = true;
+      continue;
+    }
+    if (entry.label.textContent !== part.name) entry.label.textContent = part.name;
+    node.getWorldPosition(world);
+    projected.copy(world).project(camera);
+    const visible = projected.z >= -1 && projected.z <= 1;
+    entry.label.hidden = !visible;
+    if (!visible) continue;
+    entry.label.style.left = `${(projected.x * 0.5 + 0.5) * rect.width}px`;
+    entry.label.style.top = `${(-projected.y * 0.5 + 0.5) * rect.height}px`;
+  }
+}
+
 function populateSubmeshList(model) {
   el.submeshList.replaceChildren();
+  const filteredIndices = getFilteredPartIndices(model);
   const header = document.createElement("div");
   header.className = "submesh-row submesh-table-head";
   const visibleAll = document.createElement("input");
   visibleAll.type = "checkbox";
-  visibleAll.checked = state.meshEntries.every((entry) => entry?.mesh?.visible);
-  visibleAll.addEventListener("input", () => setAllPartsVisible(visibleAll.checked));
+  visibleAll.checked = filteredIndices.length > 0 && filteredIndices.every((index) => state.meshEntries[index]?.mesh?.visible);
+  visibleAll.addEventListener("input", () => setAllPartsVisible(visibleAll.checked, filteredIndices));
   const editAll = document.createElement("input");
   editAll.type = "checkbox";
-  editAll.checked = model.submeshes.length > 0 && model.submeshes.every((_, index) => state.batchSelectedParts.has(index));
-  editAll.addEventListener("input", () => setAllPartsSelected(editAll.checked));
+  editAll.checked = filteredIndices.length > 0 && filteredIndices.every((index) => state.batchSelectedParts.has(index));
+  editAll.addEventListener("input", () => setAllPartsSelected(editAll.checked, filteredIndices));
   const visibleHead = createHeaderCheckboxCell(visibleAll, t("visible"));
   const editHead = createHeaderCheckboxCell(editAll, t("selected"));
+  const idHead = document.createElement("span");
+  idHead.textContent = "ID";
   const nameHead = document.createElement("span");
   nameHead.textContent = t("parts");
   const countHead = document.createElement("span");
   countHead.textContent = `${t("verts")}/${t("facesShort")}`;
-  header.append(visibleHead, editHead, nameHead, countHead, document.createElement("span"));
+  header.append(visibleHead, editHead, idHead, nameHead, countHead, document.createElement("span"));
   el.submeshList.append(header);
   updateBatchActionState();
-  for (const [index, part] of model.submeshes.entries()) {
+  for (const index of filteredIndices) {
+    const part = model.submeshes[index];
     const row = document.createElement("div");
     row.className = "submesh-row";
     row.dataset.partIndex = String(index);
@@ -1453,15 +1795,26 @@ function populateSubmeshList(model) {
     const name = document.createElement("span");
     name.textContent = part.name;
     name.dataset.partNameIndex = String(index);
+    const id = document.createElement("small");
+    id.textContent = String(index);
     const count = document.createElement("small");
     count.textContent = `${part.vertexCount}/${part.faceCount}`;
     const exportButton = document.createElement("button");
     exportButton.type = "button";
     exportButton.textContent = t("export");
     exportButton.addEventListener("click", () => exportPartGlb(index));
-    row.append(visibleCheckbox, editCheckbox, name, count, exportButton);
+    row.append(visibleCheckbox, editCheckbox, id, name, count, exportButton);
     el.submeshList.append(row);
   }
+}
+
+function getFilteredPartIndices(model) {
+  const query = el.partFilter.value.trim().toLowerCase();
+  const indices = [];
+  for (const [index, part] of model.submeshes.entries()) {
+    if (!query || part.name.toLowerCase().includes(query)) indices.push(index);
+  }
+  return indices;
 }
 
 function createHeaderCheckboxCell(input, text) {
@@ -1486,7 +1839,9 @@ function setHighlightedPart(index) {
   state.highlightedPartIndex = index;
   applyHighlightedMaterial();
   updateHighlightedRows();
+  updateHighlightInfo();
   el.duplicatePart.disabled = false;
+  el.deletePart.disabled = false;
   openPartEditor(index);
 }
 
@@ -1494,9 +1849,27 @@ function clearHighlightedPart() {
   restoreHighlightedMaterial();
   state.highlightedPartIndex = -1;
   updateHighlightedRows();
+  updateHighlightInfo();
   el.duplicatePart.disabled = true;
+  el.deletePart.disabled = true;
   state.editIndex = -1;
-  el.editorBlock.hidden = true;
+  setEditorEnabled(false);
+}
+
+function setEditorEnabled(enabled) {
+  el.editorBlock.classList.toggle("disabled", !enabled);
+  for (const control of el.editorBlock.querySelectorAll("input, select, button")) {
+    control.disabled = !enabled;
+  }
+  if (!enabled) {
+    el.editorName.textContent = "-";
+    el.editName.value = "";
+    el.editMaterial.replaceChildren();
+    el.editParent.replaceChildren();
+    el.transformEditor.replaceChildren();
+    el.keepWorldOnParentChange.checked = true;
+    el.matrixMode.checked = false;
+  }
 }
 
 function restoreHighlightedMaterial() {
@@ -1538,6 +1911,7 @@ function refreshHighlightedMaterial() {
   restoreHighlightedMaterial();
   state.highlightedPartIndex = index;
   applyHighlightedMaterial();
+  updateHighlightInfo();
 }
 
 function updateHighlightedRows() {
@@ -1546,8 +1920,69 @@ function updateHighlightedRows() {
   }
 }
 
-function setAllPartsVisible(visible) {
-  for (const [index, entry] of state.meshEntries.entries()) {
+function updateHighlightInfo() {
+  const entry = state.meshEntries[state.highlightedPartIndex];
+  if (!entry?.mesh || !entry.part) {
+    updateModelInfo();
+    return;
+  }
+  const box = new THREE.Box3().setFromObject(entry.mesh);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const material = state.currentModel?.materials?.[entry.part.materialId];
+  const degree = getPartConnectionCount(state.highlightedPartIndex);
+  el.highlightInfo.hidden = false;
+  el.highlightInfo.innerHTML = `
+    <strong>${escapeHtml(entry.part.name)}</strong>
+    <div>ID: ${state.highlightedPartIndex} | ${t("connections")}: ${degree} | ${t("vertices")}: ${entry.part.vertexCount} | ${t("faces")}: ${entry.part.faceCount}</div>
+    <div>${t("material")}: ${entry.part.materialId}${material?.textureName ? ` (${escapeHtml(material.textureName)})` : ""}</div>
+    <div>Size: ${formatNumber(size.x)} / ${formatNumber(size.y)} / ${formatNumber(size.z)}</div>
+    <div>Pos: ${formatNumber(center.x)} / ${formatNumber(center.y)} / ${formatNumber(center.z)}</div>
+  `;
+}
+
+function getPartConnectionCount(index) {
+  const model = state.currentModel;
+  if (!model?.submeshes[index]) return 0;
+  let count = model.submeshes[index].parentId >= 0 ? 1 : 0;
+  for (const part of model.submeshes) {
+    if (part.parentId === index) count++;
+  }
+  return count;
+}
+
+function updateModelInfo() {
+  if (!state.currentModel) {
+    el.highlightInfo.hidden = true;
+    el.highlightInfo.replaceChildren();
+    return;
+  }
+  const box = state.currentModel.bounds || new THREE.Box3();
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  el.highlightInfo.hidden = false;
+  el.highlightInfo.innerHTML = `
+    <strong>${escapeHtml(state.currentModel.name || "Model")}</strong>
+    <div>${t("parts")}: ${state.currentModel.submeshes.length} | ${t("materials")}: ${state.currentModel.materials.length}</div>
+    <div>${t("vertices")}: ${state.currentModel.totalVertices} | ${t("faces")}: ${state.currentModel.totalFaces}</div>
+    <div>Size: ${formatNumber(size.x)} / ${formatNumber(size.y)} / ${formatNumber(size.z)}</div>
+    <div>Center: ${formatNumber(center.x)} / ${formatNumber(center.y)} / ${formatNumber(center.z)}</div>
+  `;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
+function setAllPartsVisible(visible, indices = state.meshEntries.map((_, index) => index)) {
+  for (const index of indices) {
+    const entry = state.meshEntries[index];
     if (!entry?.mesh) continue;
     entry.mesh.visible = visible;
     if (state.normalVisualizers[index]) {
@@ -1557,10 +1992,12 @@ function setAllPartsVisible(visible) {
   populateSubmeshList(state.currentModel);
 }
 
-function setAllPartsSelected(selected) {
-  state.batchSelectedParts = selected
-    ? new Set(state.currentModel.submeshes.map((_, index) => index))
-    : new Set();
+function setAllPartsSelected(selected, indices = state.currentModel.submeshes.map((_, index) => index)) {
+  if (selected) {
+    for (const index of indices) state.batchSelectedParts.add(index);
+  } else {
+    for (const index of indices) state.batchSelectedParts.delete(index);
+  }
   populateSubmeshList(state.currentModel);
 }
 
@@ -1581,7 +2018,7 @@ function openPartEditor(index) {
   if (!state.currentModel || !state.meshEntries[index]) return;
   state.editIndex = index;
   const part = state.currentModel.submeshes[index];
-  el.editorBlock.hidden = false;
+  setEditorEnabled(true);
   el.editorName.textContent = part.name;
   el.editName.value = part.name;
 
@@ -1607,6 +2044,7 @@ function openPartEditor(index) {
     el.editParent.append(option);
   }
   el.editParent.value = String(part.parentId);
+  el.keepWorldOnParentChange.checked = true;
 
   buildTransformEditor(part);
 }
@@ -1952,7 +2390,10 @@ function createTransformInput(type, control, transform) {
 
 function applyEditorValues() {
   if (!state.currentModel || state.editIndex < 0) return;
+  pushUndoSnapshot();
   const part = state.currentModel.submeshes[state.editIndex];
+  const previousParentId = part.parentId;
+  const previousWorldMatrix = getPartWorldRenderMatrix(state.editIndex);
   const oldName = part.name;
   const newName = normalizePartName(el.editName.value, state.editIndex);
   part.name = newName;
@@ -1980,10 +2421,18 @@ function applyEditorValues() {
     }
   }
 
-  part.matrix = el.matrixMode.checked ? matrixInputsToMd9Matrix() : transformInputsToMd9Matrix();
+  if (el.keepWorldOnParentChange.checked && part.parentId !== previousParentId) {
+    const parentWorld = part.parentId >= 0 ? getPartWorldRenderMatrix(part.parentId) : new THREE.Matrix4();
+    const nextLocal = new THREE.Matrix4().copy(parentWorld).invert().multiply(previousWorldMatrix);
+    part.matrix = renderMatrixToMd9Array(nextLocal);
+    buildTransformEditor(part);
+  } else {
+    part.matrix = el.matrixMode.checked ? matrixInputsToMd9Matrix() : transformInputsToMd9Matrix();
+  }
 
   syncPartBone(part);
   updateModelDerivedData();
+  updateHighlightInfo();
   setStatus(t("updatedPart", { name: part.name }));
 }
 
@@ -2006,6 +2455,17 @@ function makeUniquePartName() {
   return name;
 }
 
+function getPartWorldRenderMatrix(index, cache = new Map()) {
+  if (cache.has(index)) return cache.get(index).clone();
+  const part = state.currentModel?.submeshes[index];
+  if (!part) return new THREE.Matrix4();
+  const local = md9ArrayToRenderMatrix(part.matrix);
+  const parentWorld = part.parentId >= 0 ? getPartWorldRenderMatrix(part.parentId, cache) : new THREE.Matrix4();
+  const world = new THREE.Matrix4().multiplyMatrices(parentWorld, local);
+  cache.set(index, world.clone());
+  return world;
+}
+
 function syncTransformInputPair(source) {
   const selector = `[data-transform="${source.dataset.transform}"][data-axis="${source.dataset.axis}"]`;
   for (const input of el.transformEditor.querySelectorAll(selector)) {
@@ -2023,6 +2483,7 @@ function syncBatchTransformInputPair(source) {
 function applyBatchEditorDelta() {
   const indices = getSelectedPartIndices();
   if (!state.currentModel) return;
+  pushUndoSnapshot();
   const next = batchInputsToRenderMatrix();
   const previousInverse = state.batchTransformMatrix.clone().invert();
   const delta = new THREE.Matrix4().multiplyMatrices(next, previousInverse);
@@ -2212,6 +2673,7 @@ function renderMatrixToMd9Array(renderMatrix) {
 
 function addPart() {
   if (!state.currentModel || !state.root) return;
+  pushUndoSnapshot();
   const name = makeUniqueNewPartName();
   const parentId = state.editIndex >= 0 ? state.editIndex : -1;
   const parentPart = state.currentModel.submeshes[parentId];
@@ -2268,6 +2730,7 @@ function addPart() {
 function duplicateHighlightedPart() {
   const sourceIndex = state.highlightedPartIndex;
   if (!state.currentModel || sourceIndex < 0 || !state.meshEntries[sourceIndex]) return;
+  pushUndoSnapshot();
   const sourcePart = state.currentModel.submeshes[sourceIndex];
   const sourceEntry = state.meshEntries[sourceIndex];
   const part = {
@@ -2385,6 +2848,7 @@ function createCubeMeshData(half) {
 
 async function restoreEditedPart() {
   if (!state.currentModel || state.editIndex < 0) return;
+  pushUndoSnapshot();
   const part = state.currentModel.submeshes[state.editIndex];
   const oldName = part.name;
   restorePartFromState(part, part.initialState);
@@ -2423,6 +2887,7 @@ function restorePartFromState(part, snapshot) {
 
 function clearEditedPartMesh() {
   if (!state.currentModel || state.editIndex < 0) return;
+  pushUndoSnapshot();
   const part = state.currentModel.submeshes[state.editIndex];
   const size = 0.0001;
   part.localPositions = new Float32Array([
@@ -2459,6 +2924,7 @@ function deleteEditedPart() {
     setStatus(t("cannotDeleteLast"));
     return;
   }
+  pushUndoSnapshot();
   const deleteIndex = state.editIndex;
   const highlightedIndex = state.highlightedPartIndex;
   if (highlightedIndex === deleteIndex) clearHighlightedPart();
@@ -2494,7 +2960,7 @@ function deleteEditedPart() {
   }
 
   state.editIndex = -1;
-  el.editorBlock.hidden = true;
+  setEditorEnabled(false);
   rebuildSceneHelpers();
   updateModelDerivedData();
   populateSubmeshList(state.currentModel);
@@ -2511,6 +2977,7 @@ async function replaceEditedPartFromFiles(files) {
     setStatus(t("replacementNeedsModel"));
     return;
   }
+  pushUndoSnapshot();
   try {
     await replacePartWithModelFiles(state.editIndex, modelFile, files, { keepSize: el.replaceKeepSize.checked });
     populateSubmeshList(state.currentModel);
@@ -2519,6 +2986,48 @@ async function replaceEditedPartFromFiles(files) {
   } catch (error) {
     console.error(error);
     setStatus(error.message);
+  }
+}
+
+async function importSkinnedGltfFiles(files) {
+  const modelFile = files.find((file) => /\.(glb|gltf)$/i.test(file.name));
+  if (!modelFile) {
+    setStatus(t("importNeedsGltf"));
+    return;
+  }
+  try {
+    setStatus(t("loadingModel", { name: modelFile.name }));
+    const model = await createMd9FromSkinnedGltf(modelFile, files, {
+      vertexMode: el.skinVertexMode.value,
+      faceMode: el.skinFaceMode.value
+    });
+    const id = `generated:${model.name}:${Date.now()}`;
+    state.md9Files.push({ id, label: model.name, model });
+    state.currentMd9Id = id;
+    updateModelSelect();
+    await showModel(model, model.name);
+    addGeneratedAnimationsToState(model);
+    updateAnimationSelect();
+    if (model.generatedAnimations?.length) {
+      const first = state.aniFiles.find((item) => item.modelId === id);
+      if (first) await loadSelectedAnimation(first.id);
+    }
+    setStatus(t("importedSkinnedGltf", { name: modelFile.name, parts: model.submeshes.length }));
+  } catch (error) {
+    console.error(error);
+    setStatus(error.message || String(error));
+  }
+}
+
+function addGeneratedAnimationsToState(model) {
+  state.aniFiles = state.aniFiles.filter((item) => item.modelId !== state.currentMd9Id);
+  for (const animation of model.generatedAnimations || []) {
+    state.aniFiles.push({
+      id: `${state.currentMd9Id}:ani:${animation.name}`,
+      label: `${model.name}/${animation.name}`,
+      animation,
+      modelId: state.currentMd9Id
+    });
   }
 }
 
@@ -2608,6 +3117,7 @@ async function batchReplaceSelectedPartsFromFiles(files) {
     partByName.set(normalizeMatchName(state.currentModel.submeshes[index].name), index);
   }
   let replaced = 0;
+  pushUndoSnapshot();
   for (const modelFile of modelFiles) {
     const index = partByName.get(normalizeMatchName(modelFile.name.replace(/\.[^.]+$/, "")));
     if (index === undefined) continue;
@@ -2619,6 +3129,8 @@ async function batchReplaceSelectedPartsFromFiles(files) {
     }
   }
   if (!replaced) {
+    state.undoStack.pop();
+    updateHistoryButtons();
     setStatus(t("batchReplaceNoMatch"));
     return;
   }
@@ -2640,7 +3152,7 @@ async function parseReplacementModel(modelFile, mtlFile, files) {
   return parseGltfReplacement(data, files);
 }
 
-function createMd9MaterialFromThree(threeMaterial, textureName, templateMaterial = null) {
+function createMd9MaterialFromThree(threeMaterial, textureName, templateMaterial = null, options = {}) {
   if (textureName && templateMaterial) {
     return {
       diffuse: [...templateMaterial.diffuse],
@@ -2661,7 +3173,7 @@ function createMd9MaterialFromThree(threeMaterial, textureName, templateMaterial
     emissive: [0, 0, 0, 1],
     power: 0,
     textureName,
-    extra: state.currentModel.newFormat ? new Array(16).fill(0) : []
+    extra: (options.newFormat ?? state.currentModel?.newFormat ?? true) ? new Array(16).fill(0) : []
   };
 }
 
@@ -2768,6 +3280,424 @@ async function parseGltfReplacement(buffer, files) {
     textureSources,
     uvSourceIds
   };
+}
+
+async function createMd9FromSkinnedGltf(modelFile, files, options) {
+  const data = modelFile.name.toLowerCase().endsWith(".gltf") ? await modelFile.text() : await modelFile.arrayBuffer();
+  const loader = new GLTFLoader(createReplacementLoadingManager(files));
+  const gltf = await new Promise((resolve, reject) => loader.parse(data, "", resolve, reject));
+  gltf.scene.updateMatrixWorld(true);
+  const skinnedMeshes = [];
+  const boneSet = new Set();
+  gltf.scene.traverse((object) => {
+    if (!object.isSkinnedMesh || !object.geometry || !object.skeleton?.bones?.length) return;
+    object.skeleton.update();
+    skinnedMeshes.push(object);
+    for (const bone of object.skeleton.bones) boneSet.add(bone);
+  });
+  if (!skinnedMeshes.length || !boneSet.size) throw new Error(t("importNeedsSkin"));
+
+  let bones = [...boneSet];
+  let boneIndex = new Map(bones.map((bone, index) => [bone, index]));
+  const partBuckets = bones.map(() => ({ positions: [], normals: [], uvs: [], indices: [], uvSourceIds: [] }));
+  const textureSources = [];
+  const vertexRefSources = [];
+  const zeroUv = new THREE.Vector2();
+
+  for (const mesh of skinnedMeshes) {
+    appendSkinnedMeshAsRigidParts(mesh, files, bones, boneIndex, partBuckets, textureSources, vertexRefSources, zeroUv, options);
+  }
+  const pruned = pruneEmptyBones(bones, partBuckets);
+  bones = pruned.bones;
+  boneIndex = new Map(bones.map((bone, index) => [bone, index]));
+  const activeBuckets = pruned.buckets;
+  for (const ref of vertexRefSources) ref.partIndex = pruned.indexMap.get(ref.partIndex);
+  const activeVertexRefs = vertexRefSources.filter((ref) => ref.partIndex !== undefined);
+
+  let material = createMd9MaterialFromThree(null, "", null, { newFormat: true });
+  let previewTexture = null;
+  if (textureSources.length) {
+    const atlas = await buildTextureAtlas(textureSources);
+    material = createMd9MaterialFromThree(null, normalizeMd9TextureName(modelFile.name.replace(/\.[^.]+$/, "")), null, { newFormat: true });
+    material.atlasSourceImage = atlas.canvas;
+    material.atlasHasAlpha = atlas.hasAlpha;
+    for (const ref of activeVertexRefs) {
+      const source = textureSources[ref.sourceId];
+      if (!source?.rect) continue;
+      const remapped = remapSourceUvToAtlas(source, ref.u, ref.v, atlas.canvas.width, atlas.canvas.height);
+      activeBuckets[ref.partIndex].uvs[ref.uvOffset] = remapped.u;
+      activeBuckets[ref.partIndex].uvs[ref.uvOffset + 1] = remapped.v;
+    }
+    previewTexture = new THREE.CanvasTexture(atlas.canvas);
+    previewTexture.colorSpace = THREE.SRGBColorSpace;
+    previewTexture.flipY = false;
+    previewTexture.wrapS = THREE.ClampToEdgeWrapping;
+    previewTexture.wrapT = THREE.ClampToEdgeWrapping;
+    previewTexture.userData.hasAlpha = atlas.hasAlpha;
+  }
+
+  const materials = [material];
+  const submeshes = bones.map((bone, index) => createMd9PartFromBone(bone, index, pruned.parentIds[index], bones, activeBuckets[index]));
+  promoteImportedRootPart(submeshes);
+  const model = {
+    name: `${modelFile.name.replace(/\.[^.]+$/, "")}.md9`,
+    baseDir: "",
+    newFormat: true,
+    materials,
+    submeshes,
+    totalVertices: 0,
+    totalFaces: 0,
+    bounds: new THREE.Box3(),
+    generatedAnimations: createAniAnimationsFromGltf(gltf, bones)
+  };
+  captureInitialModelState(model);
+  updateGeneratedModelCounts(model);
+  if (previewTexture) {
+    model.materials[0].atlasSourceImage = material.atlasSourceImage;
+    model.materials[0].atlasHasAlpha = material.atlasHasAlpha;
+  }
+  return model;
+}
+
+function appendSkinnedMeshAsRigidParts(mesh, files, bones, boneIndex, partBuckets, textureSources, vertexRefSources, zeroUv, options) {
+  const geometry = mesh.geometry.getAttribute("normal") ? mesh.geometry : mesh.geometry.clone();
+  if (!geometry.getAttribute("normal")) geometry.computeVertexNormals();
+  const position = geometry.getAttribute("position");
+  const normal = geometry.getAttribute("normal");
+  const uv = geometry.getAttribute("uv");
+  const skinIndex = geometry.getAttribute("skinIndex");
+  const skinWeight = geometry.getAttribute("skinWeight");
+  if (!position || !skinIndex || !skinWeight) return;
+  const index = geometry.getIndex();
+  const drawCount = index ? index.count : position.count;
+  const materialForDraw = buildMaterialDrawLookup(geometry, mesh.material);
+  const vertex = new THREE.Vector3();
+  const vertexNormal = new THREE.Vector3();
+  const inverseBoneWorld = new THREE.Matrix4();
+  const localNormal = new THREE.Vector3();
+
+  for (let drawIndex = 0; drawIndex < drawCount; drawIndex += 3) {
+    const vertexIndices = [
+      index ? index.getX(drawIndex) : drawIndex,
+      index ? index.getX(drawIndex + 1) : drawIndex + 1,
+      index ? index.getX(drawIndex + 2) : drawIndex + 2
+    ];
+    const owner = chooseTriangleOwner(mesh, skinIndex, skinWeight, vertexIndices, boneIndex, options);
+    const bucket = partBuckets[owner];
+    const sourceId = registerTextureSource(textureSources, materialForDraw(drawIndex), files);
+    const start = bucket.positions.length / 3;
+    inverseBoneWorld.copy(bones[owner].matrixWorld).invert();
+    for (const vertexIndex of vertexIndices) {
+      getGltfWorldVertex(mesh, geometry, position, vertexIndex, vertex).applyMatrix4(inverseBoneWorld);
+      getGltfWorldNormal(mesh, geometry, normal, vertexIndex, vertexNormal);
+      localNormal.copy(vertexNormal).transformDirection(inverseBoneWorld).normalize();
+      bucket.positions.push(vertex.x, vertex.y, vertex.z);
+      bucket.normals.push(localNormal.x, localNormal.y, localNormal.z);
+      const u = uv ? uv.getX(vertexIndex) : zeroUv.x;
+      const v = uv ? uv.getY(vertexIndex) : zeroUv.y;
+      const uvOffset = bucket.uvs.length;
+      bucket.uvs.push(u, v);
+      if (sourceId >= 0) vertexRefSources.push({ partIndex: owner, uvOffset, sourceId, u: wrapUv(u), v: wrapUv(v) });
+    }
+    bucket.indices.push(start, start + 1, start + 2);
+  }
+  if (geometry !== mesh.geometry) geometry.dispose();
+}
+
+function pruneEmptyBones(bones, buckets) {
+  const kept = [];
+  const keptBuckets = [];
+  const indexMap = new Map();
+  for (const [index, bone] of bones.entries()) {
+    if (!buckets[index].positions.length) continue;
+    indexMap.set(index, kept.length);
+    kept.push(bone);
+    keptBuckets.push(buckets[index]);
+  }
+  if (!kept.length) throw new Error(t("replacementNoMesh"));
+  const originalIndex = new Map(bones.map((bone, index) => [bone, index]));
+  const parentIds = kept.map((bone) => {
+    let parent = bone.parent;
+    while (parent) {
+      const parentIndex = originalIndex.get(parent);
+      if (parentIndex === undefined) break;
+      if (indexMap.has(parentIndex)) return indexMap.get(parentIndex);
+      parent = parent.parent;
+    }
+    return -1;
+  });
+  return { bones: kept, buckets: keptBuckets, indexMap, parentIds };
+}
+
+function chooseTriangleOwner(mesh, skinIndex, skinWeight, vertexIndices, boneIndex, options) {
+  const owners = vertexIndices.map((vertexIndex) => chooseVertexOwner(mesh, skinIndex, skinWeight, vertexIndex, boneIndex, options.vertexMode));
+  if (options.faceMode === "firstVertex") return owners[0];
+  const totals = new Map();
+  for (const vertexIndex of vertexIndices) {
+    for (const influence of getVertexInfluences(mesh, skinIndex, skinWeight, vertexIndex, boneIndex)) {
+      totals.set(influence.index, (totals.get(influence.index) || 0) + influence.weight);
+    }
+  }
+  if (options.faceMode === "majorityVertex") {
+    const counts = new Map();
+    for (const owner of owners) counts.set(owner, (counts.get(owner) || 0) + 1);
+    let best = owners[0];
+    for (const owner of counts.keys()) {
+      if (counts.get(owner) > counts.get(best) || (counts.get(owner) === counts.get(best) && (totals.get(owner) || 0) > (totals.get(best) || 0))) {
+        best = owner;
+      }
+    }
+    return best;
+  }
+  let best = owners[0];
+  for (const [index, weight] of totals) {
+    if (weight > (totals.get(best) || 0)) best = index;
+  }
+  return best;
+}
+
+function chooseVertexOwner(mesh, skinIndex, skinWeight, vertexIndex, boneIndex, mode) {
+  const influences = getVertexInfluences(mesh, skinIndex, skinWeight, vertexIndex, boneIndex);
+  if (!influences.length) return 0;
+  if (mode === "firstWeight") return influences[0].index;
+  return influences.reduce((best, item) => (item.weight > best.weight ? item : best), influences[0]).index;
+}
+
+function getVertexInfluences(mesh, skinIndex, skinWeight, vertexIndex, boneIndex) {
+  const influences = [];
+  for (let i = 0; i < skinIndex.itemSize; i++) {
+    const skeletonBone = mesh.skeleton.bones[skinIndex.getComponent(vertexIndex, i)];
+    const mapped = boneIndex.get(skeletonBone);
+    const weight = skinWeight.getComponent(vertexIndex, i);
+    if (mapped !== undefined && weight > 0) influences.push({ index: mapped, weight });
+  }
+  return influences;
+}
+
+function createMd9PartFromBone(bone, index, parentId, bones, bucket) {
+  const importWasEmpty = bucket.positions.length === 0;
+  ensureNonEmptyBucket(bucket);
+  if (bucket.positions.length / 3 > 65535) throw new Error(t("replacementTooLarge"));
+  const parentWorld = parentId >= 0 ? bones[parentId].matrixWorld : new THREE.Matrix4();
+  const localMatrix = parentId >= 0
+    ? new THREE.Matrix4().copy(parentWorld).invert().multiply(bone.matrixWorld)
+    : new THREE.Matrix4().copy(bone.matrixWorld);
+  const positions = new Float32Array(bucket.positions);
+  const normals = new Float32Array(bucket.normals);
+  const uvs = new Float32Array(bucket.uvs);
+  const indices = new Uint16Array(bucket.indices);
+  const box = computeArrayBox(positions);
+  return {
+    name: makeUniqueImportedBoneName(bone.name || `bone_${index}`, index),
+    matrix: renderMatrixToMd9Array(localMatrix),
+    boundingBox: box.isEmpty() ? [0, 0, 0, 0, 0, 0] : [box.min.x, box.min.y, -box.max.z, box.max.x, box.max.y, -box.min.z],
+    localPositions: positions,
+    normals,
+    uvs,
+    indices,
+    materialId: 0,
+    parentId,
+    vertexCount: positions.length / 3,
+    faceCount: indices.length / 3,
+    bonePosition: new THREE.Vector3().setFromMatrixPosition(localMatrix),
+    worldBonePosition: new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld),
+    importWasEmpty,
+    replacement: null
+  };
+}
+
+function promoteImportedRootPart(submeshes) {
+  if (submeshes.length <= 1) return;
+  const worldMatrices = buildPartWorldMatrices(submeshes);
+  const boxes = submeshes.map((part, index) => computePartWorldBox(part, worldMatrices[index]));
+  const rootIndex = chooseImportedRootIndexByGraph(submeshes, boxes);
+  if (rootIndex < 0) return;
+
+  const adjacency = buildPartAdjacency(submeshes);
+  const visited = new Set();
+  rerootImportedComponent(rootIndex, -1, submeshes, adjacency, worldMatrices, visited);
+  for (let index = 0; index < submeshes.length; index++) {
+    if (visited.has(index)) continue;
+    rerootImportedComponent(index, rootIndex, submeshes, adjacency, worldMatrices, visited);
+  }
+  moveImportedRootToFirst(submeshes, rootIndex);
+}
+
+function buildPartWorldMatrices(submeshes) {
+  const cache = new Map();
+  const getWorld = (index) => {
+    if (cache.has(index)) return cache.get(index);
+    const part = submeshes[index];
+    const local = md9ArrayToRenderMatrix(part.matrix);
+    const parentWorld = part.parentId >= 0 ? getWorld(part.parentId) : new THREE.Matrix4();
+    const world = new THREE.Matrix4().multiplyMatrices(parentWorld, local);
+    cache.set(index, world);
+    return world;
+  };
+  return submeshes.map((_, index) => getWorld(index).clone());
+}
+
+function computePartWorldBox(part, worldMatrix) {
+  const box = new THREE.Box3();
+  const point = new THREE.Vector3();
+  for (let i = 0; i < part.localPositions.length; i += 3) {
+    point.set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2]).applyMatrix4(worldMatrix);
+    box.expandByPoint(point);
+  }
+  return box;
+}
+
+function chooseImportedRootIndexByGraph(submeshes, boxes) {
+  let bestIndex = -1;
+  let bestDegree = -1;
+  let bestVolume = -1;
+  const size = new THREE.Vector3();
+  const hasNonEmptyCandidate = submeshes.some((part) => !part.importWasEmpty);
+  for (const [index, box] of boxes.entries()) {
+    if (hasNonEmptyCandidate && submeshes[index].importWasEmpty) continue;
+    const degree = getImportedPartDegree(submeshes, index);
+    box.getSize(size);
+    const volume = size.x * size.y * size.z;
+    if (degree > bestDegree || (degree === bestDegree && volume > bestVolume)) {
+      bestDegree = degree;
+      bestVolume = volume;
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
+function getImportedPartDegree(submeshes, index) {
+  let degree = submeshes[index].parentId >= 0 ? 1 : 0;
+  for (const part of submeshes) {
+    if (part.parentId === index) degree++;
+  }
+  return degree;
+}
+
+function buildPartAdjacency(submeshes) {
+  const adjacency = submeshes.map(() => []);
+  for (const [index, part] of submeshes.entries()) {
+    if (part.parentId < 0 || !adjacency[part.parentId]) continue;
+    adjacency[index].push(part.parentId);
+    adjacency[part.parentId].push(index);
+  }
+  return adjacency;
+}
+
+function rerootImportedComponent(startIndex, parentIndex, submeshes, adjacency, worldMatrices, visited) {
+  const stack = [{ index: startIndex, parentIndex }];
+  while (stack.length) {
+    const current = stack.pop();
+    if (visited.has(current.index)) continue;
+    visited.add(current.index);
+
+    const world = worldMatrices[current.index];
+    const local = current.parentIndex >= 0
+      ? new THREE.Matrix4().copy(worldMatrices[current.parentIndex]).invert().multiply(world)
+      : world.clone();
+    const part = submeshes[current.index];
+    part.parentId = current.parentIndex;
+    part.matrix = renderMatrixToMd9Array(local);
+    part.bonePosition = new THREE.Vector3().setFromMatrixPosition(local);
+    part.worldBonePosition = new THREE.Vector3().setFromMatrixPosition(world);
+
+    for (const neighbor of adjacency[current.index]) {
+      if (!visited.has(neighbor)) stack.push({ index: neighbor, parentIndex: current.index });
+    }
+  }
+}
+
+function moveImportedRootToFirst(submeshes, rootIndex) {
+  if (rootIndex <= 0) return;
+  const order = [rootIndex];
+  for (let index = 0; index < submeshes.length; index++) {
+    if (index !== rootIndex) order.push(index);
+  }
+  const oldToNew = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+  const reordered = order.map((oldIndex) => submeshes[oldIndex]);
+  for (const part of reordered) {
+    part.parentId = part.parentId >= 0 ? oldToNew.get(part.parentId) : -1;
+  }
+  submeshes.splice(0, submeshes.length, ...reordered);
+}
+
+function ensureNonEmptyBucket(bucket) {
+  if (bucket.positions.length) return;
+  const s = 0.001;
+  bucket.positions.push(0, 0, 0, s, 0, 0, 0, s, 0);
+  bucket.normals.push(0, 0, 1, 0, 0, 1, 0, 0, 1);
+  bucket.uvs.push(0, 0, 1, 0, 0, 1);
+  bucket.indices.push(0, 1, 2);
+}
+
+function makeUniqueImportedBoneName(name, index) {
+  return sanitizeFilename(`${name || "bone"}_${index}`).slice(0, 31) || `bone_${index}`;
+}
+
+function updateGeneratedModelCounts(model) {
+  model.totalVertices = model.submeshes.reduce((sum, part) => sum + part.vertexCount, 0);
+  model.totalFaces = model.submeshes.reduce((sum, part) => sum + part.faceCount, 0);
+  model.bounds = new THREE.Box3();
+  const point = new THREE.Vector3();
+  const worldMatrices = new Map();
+  const getWorldMatrix = (index) => {
+    if (worldMatrices.has(index)) return worldMatrices.get(index);
+    const part = model.submeshes[index];
+    const local = md9ArrayToRenderMatrix(part.matrix);
+    const parentWorld = part.parentId >= 0 ? getWorldMatrix(part.parentId) : new THREE.Matrix4();
+    const world = new THREE.Matrix4().multiplyMatrices(parentWorld, local);
+    worldMatrices.set(index, world);
+    return world;
+  };
+  for (const part of model.submeshes) {
+    const world = getWorldMatrix(model.submeshes.indexOf(part));
+    for (let i = 0; i < part.localPositions.length; i += 3) {
+      point.set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2]).applyMatrix4(world);
+      model.bounds.expandByPoint(point);
+    }
+  }
+  if (model.bounds.isEmpty()) model.bounds.set(new THREE.Vector3(), new THREE.Vector3());
+}
+
+function createAniAnimationsFromGltf(gltf, bones) {
+  const boneNames = new Set(bones.map((bone, index) => makeUniqueImportedBoneName(bone.name || `bone_${index}`, index)));
+  const nodeNameToBoneName = new Map(bones.map((bone, index) => [bone.name, makeUniqueImportedBoneName(bone.name || `bone_${index}`, index)]));
+  return (gltf.animations || []).map((clip) => {
+    const tracks = new Map();
+    let duration = 0;
+    for (const keyTrack of clip.tracks) {
+      const parsed = parseGltfTrackName(keyTrack.name);
+      const boneName = nodeNameToBoneName.get(parsed.nodeName);
+      if (!boneName || !boneNames.has(boneName)) continue;
+      if (!tracks.has(boneName)) tracks.set(boneName, { boneName, positions: [], rotations: [], scales: [] });
+      const track = tracks.get(boneName);
+      const itemSize = keyTrack.getValueSize();
+      for (let i = 0; i < keyTrack.times.length; i++) {
+        const time = keyTrack.times[i] * ANIMATION_FPS;
+        duration = Math.max(duration, time);
+        const offset = i * itemSize;
+        if (parsed.property === "position") {
+          track.positions.push({ time, value: new THREE.Vector3(keyTrack.values[offset], keyTrack.values[offset + 1], keyTrack.values[offset + 2]) });
+        } else if (parsed.property === "quaternion") {
+          track.rotations.push({ time, value: new THREE.Quaternion(keyTrack.values[offset], keyTrack.values[offset + 1], keyTrack.values[offset + 2], keyTrack.values[offset + 3]).normalize() });
+        } else if (parsed.property === "scale") {
+          track.scales.push({ time, value: new THREE.Vector3(keyTrack.values[offset], keyTrack.values[offset + 1], keyTrack.values[offset + 2]) });
+        }
+      }
+    }
+    return { name: `${sanitizeFilename(clip.name || "animation")}.ani`, duration, tracks };
+  }).filter((animation) => animation.tracks.size);
+}
+
+function parseGltfTrackName(name) {
+  try {
+    const parsed = THREE.PropertyBinding.parseTrackName(name);
+    return { nodeName: parsed.nodeName, property: parsed.propertyName };
+  } catch {
+    const match = String(name).match(/^(.*)\.(position|quaternion|scale)$/);
+    return { nodeName: match?.[1] || "", property: match?.[2] || "" };
+  }
 }
 
 function appendGltfMesh(object, files, positions, normals, uvs, uvSourceIds, textureSources, zeroUv) {
@@ -3149,6 +4079,111 @@ function updatePartGeometry(index) {
   applyOptions();
 }
 
+function updateAllPartGeometries() {
+  for (const [index, part] of state.currentModel.submeshes.entries()) {
+    const entry = state.meshEntries[index];
+    if (!entry?.mesh) continue;
+    const geometry = entry.mesh.geometry;
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(part.localPositions, 3));
+    geometry.computeBoundingSphere();
+    geometry.attributes.position.needsUpdate = true;
+    entry.part = part;
+  }
+  rebuildNormalVisualizers();
+  applyOptions();
+}
+
+function scaleCurrentModelToHeight() {
+  const model = state.currentModel;
+  if (!model) return;
+  const targetHeight = Number(el.targetModelHeight.value);
+  if (!Number.isFinite(targetHeight) || targetHeight <= 0) {
+    setStatus(t("invalidHeight"));
+    return;
+  }
+
+  const { box: modelBox } = computeModelWorldBox(model);
+  const size = modelBox.getSize(new THREE.Vector3());
+  if (modelBox.isEmpty() || size.y <= 0) {
+    setStatus(t("invalidHeight"));
+    return;
+  }
+
+  const scale = targetHeight / size.y;
+  const center = modelBox.getCenter(new THREE.Vector3());
+  const transform = new THREE.Matrix4()
+    .makeTranslation(center.x, center.y, center.z)
+    .multiply(new THREE.Matrix4().makeScale(scale, scale, scale))
+    .multiply(new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z));
+  pushUndoSnapshot();
+  applyWorldTransformToModelGeometry(transform);
+  setStatus(t("scaledModelHeight", { height: formatNumber(targetHeight) }));
+}
+
+function resetCurrentModelPosition() {
+  const model = state.currentModel;
+  if (!model) return;
+  const { box } = computeModelWorldBox(model);
+  if (box.isEmpty()) return;
+  const center = box.getCenter(new THREE.Vector3());
+  const transform = new THREE.Matrix4().makeTranslation(-center.x, -box.min.y, -center.z);
+  pushUndoSnapshot();
+  applyWorldTransformToModelGeometry(transform);
+  setStatus(t("resetModelPositionDone"));
+}
+
+function computeModelWorldBox(model) {
+  const worldMatrices = buildPartWorldMatrices(model.submeshes);
+  const box = new THREE.Box3();
+  for (const [index, part] of model.submeshes.entries()) {
+    box.union(computePartWorldBox(part, worldMatrices[index]));
+  }
+  return { box, worldMatrices };
+}
+
+function applyWorldTransformToModelGeometry(transform) {
+  const model = state.currentModel;
+  if (!model) return;
+  const oldWorldMatrices = buildPartWorldMatrices(model.submeshes);
+  const newWorldMatrices = oldWorldMatrices.map((world) => {
+    const position = new THREE.Vector3().setFromMatrixPosition(world).applyMatrix4(transform);
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+    world.decompose(new THREE.Vector3(), quaternion, scale);
+    return new THREE.Matrix4().compose(position, quaternion, scale);
+  });
+  const desiredWorld = new THREE.Vector3();
+  const localPoint = new THREE.Vector3();
+  const inverseNewWorld = new THREE.Matrix4();
+  for (const [index, part] of model.submeshes.entries()) {
+    inverseNewWorld.copy(newWorldMatrices[index]).invert();
+    for (let i = 0; i < part.localPositions.length; i += 3) {
+      desiredWorld
+        .set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2])
+        .applyMatrix4(oldWorldMatrices[index])
+        .applyMatrix4(transform);
+      localPoint.copy(desiredWorld).applyMatrix4(inverseNewWorld);
+      part.localPositions[i] = localPoint.x;
+      part.localPositions[i + 1] = localPoint.y;
+      part.localPositions[i + 2] = localPoint.z;
+    }
+  }
+  for (const [index, part] of model.submeshes.entries()) {
+    const parentWorld = part.parentId >= 0 ? newWorldMatrices[part.parentId] : null;
+    const localMatrix = parentWorld
+      ? new THREE.Matrix4().copy(parentWorld).invert().multiply(newWorldMatrices[index])
+      : newWorldMatrices[index].clone();
+    part.matrix = renderMatrixToMd9Array(localMatrix);
+    part.bonePosition = new THREE.Vector3().setFromMatrixPosition(localMatrix);
+    part.worldBonePosition = new THREE.Vector3().setFromMatrixPosition(newWorldMatrices[index]);
+  }
+  for (const part of model.submeshes) syncPartBone(part);
+  updateAllPartGeometries();
+  updateModelDerivedData();
+  frameModel(model.bounds);
+  updateHighlightInfo();
+}
+
 function rebuildSceneHelpers() {
   if (!state.currentModel || !state.root) return;
   if (state.skeletonLines) {
@@ -3202,6 +4237,7 @@ function updateModelDerivedData() {
     state.root.add(state.bounds);
   }
   if (state.skeletonLines) updateSkeletonLines();
+  if (state.meshNameLabels.length !== model.submeshes.length) rebuildMeshNameLabels();
   updateStats(model, model.name);
   applyOptions();
 }
@@ -3287,21 +4323,29 @@ function clearModels() {
   state.currentModel = null;
   state.currentMd9Id = "";
   state.missingTextures = new Set();
+  state.undoStack = [];
+  state.redoStack = [];
   state.editIndex = -1;
   state.batchSelectedParts = new Set();
   el.saveModel.disabled = true;
+  el.scaleModelHeight.disabled = true;
+  el.resetModelPosition.disabled = true;
+  el.partFilter.disabled = true;
+  el.partFilter.value = "";
   el.addPart.disabled = true;
   el.duplicatePart.disabled = true;
+  el.deletePart.disabled = true;
   el.exportSelectedParts.disabled = true;
   el.batchExportParts.disabled = true;
   el.batchEditToggle.disabled = true;
-  el.editorBlock.hidden = true;
+  setEditorEnabled(false);
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
   el.submeshList.replaceChildren();
   updateStatsEmpty();
   updateModelSelect();
   updateMissingTextures(null);
+  updateHistoryButtons();
   setStatus(t("modelsCleared"));
 }
 
@@ -3368,6 +4412,7 @@ function collectMissingTextures(model) {
   if (!model) return missing;
   for (const material of model.materials) {
     if (!material.textureName) continue;
+    if (material.atlasSourceImage || material.atlasSourceFile) continue;
     if (!findCompatibleTexture(material.textureName)) missing.add(material.textureName);
   }
   return missing;
@@ -3378,6 +4423,68 @@ function hasNewTextureForMissing(previousMissing) {
     if (findCompatibleTexture(textureName)) return true;
   }
   return false;
+}
+
+function restorePanelWidth() {
+  try {
+    const saved = parseFloat(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY) || "");
+    if (Number.isFinite(saved)) setPanelWidth(saved);
+  } catch (error) {
+    console.warn("Panel width read failed", error);
+  }
+}
+
+function installPanelResize() {
+  let resizing = false;
+  el.panelResizer.addEventListener("pointerdown", (event) => {
+    resizing = true;
+    el.panelResizer.classList.add("dragging");
+    el.panelResizer.setPointerCapture(event.pointerId);
+  });
+  el.panelResizer.addEventListener("pointermove", (event) => {
+    if (!resizing) return;
+    setPanelWidth(window.innerWidth - event.clientX);
+  });
+  const finishResize = (event) => {
+    if (!resizing) return;
+    resizing = false;
+    el.panelResizer.classList.remove("dragging");
+    if (el.panelResizer.hasPointerCapture(event.pointerId)) el.panelResizer.releasePointerCapture(event.pointerId);
+    try {
+      localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, getComputedStyle(document.documentElement).getPropertyValue("--panel-width").trim());
+    } catch (error) {
+      console.warn("Panel width save failed", error);
+    }
+  };
+  el.panelResizer.addEventListener("pointerup", finishResize);
+  el.panelResizer.addEventListener("pointercancel", finishResize);
+}
+
+function setPanelWidth(width) {
+  const clamped = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, Number(width) || MIN_PANEL_WIDTH));
+  document.documentElement.style.setProperty("--panel-width", `${Math.round(clamped)}px`);
+  resize();
+}
+
+function installCameraKeyboardControls() {
+  window.addEventListener("keydown", (event) => {
+    if (isTypingTarget(event.target)) return;
+    const key = event.key.toLowerCase();
+    if (["w", "a", "s", "d"].includes(key)) {
+      state.cameraKeys.add(key);
+      event.preventDefault();
+    } else if (key === "f") {
+      if (state.currentModel) frameModel(state.currentModel.bounds);
+      event.preventDefault();
+    }
+  });
+  window.addEventListener("keyup", (event) => {
+    state.cameraKeys.delete(event.key.toLowerCase());
+  });
+}
+
+function isTypingTarget(target) {
+  return target?.matches?.("input, textarea, select, [contenteditable='true']");
 }
 
 function installViewportPicking() {
@@ -3468,6 +4575,8 @@ async function readEntryFiles(entry) {
 function applyOptions() {
   grid.visible = el.showGrid.checked;
   if (state.skeletonLines) state.skeletonLines.visible = el.showSkeleton.checked;
+  el.meshNameOverlay.hidden = !state.currentModel || !el.showMeshNames.checked;
+  if (!el.meshNameOverlay.hidden) updateMeshNameLabels();
   if (state.bounds) state.bounds.visible = el.showBounds.checked;
   for (const entry of state.meshEntries) {
     entry.material.wireframe = el.showWireframe.checked;
@@ -3667,6 +4776,9 @@ async function saveCurrentModel() {
     const originalName = state.currentModel.name.split(/[\\/]/).pop() || "model.md9";
     const defaultBaseName = originalName.replace(/\.[^.]+$/, "") || "model";
     const baseName = normalizeModelBaseName(window.prompt(t("modelNamePrompt"), defaultBaseName) || defaultBaseName);
+    for (const animation of state.currentModel.generatedAnimations || []) {
+      zipEntries.push({ name: sanitizeFilename(animation.name || "animation.ani"), data: new Blob([serializeAni(animation)], { type: "application/octet-stream" }) });
+    }
     zipEntries.unshift({ name: `${baseName}.md9`, data: new Blob([md9], { type: "application/octet-stream" }) });
     zipEntries.push(...getSaveDependencyEntries(state.currentModel, zipEntries));
     const zip = await createZipBlob(zipEntries);
@@ -3984,7 +5096,7 @@ async function bakeReplacementAtlas(model, zipEntries = null) {
     if (!material || handled.has(material)) continue;
     if (!material.atlasSourceFile && !material.atlasSourceImage) continue;
     handled.add(material);
-    const textureName = makePartTextureName(part.name);
+    const textureName = material.textureName ? normalizeMd9TextureName(material.textureName) : makePartTextureName(part.name);
     const canvas = isCanvasLike(material.atlasSourceImage)
       ? material.atlasSourceImage
       : (await buildTextureAtlas([{
@@ -4287,8 +5399,13 @@ function disposeCurrent() {
   state.highlightedPartIndex = -1;
   state.highlightedMaterial = null;
   state.highlightedHelper = null;
+  state.meshNameLabels = [];
+  el.meshNameOverlay.replaceChildren();
+  el.meshNameOverlay.hidden = true;
+  updateHighlightInfo();
   state.boneNodes = new Map();
   if (el.duplicatePart) el.duplicatePart.disabled = true;
+  if (el.deletePart) el.deletePart.disabled = true;
 }
 
 function disposeObject(root) {
@@ -4339,16 +5456,42 @@ function resize() {
 
 function animate() {
   requestAnimationFrame(animate);
+  const now = performance.now();
+  const deltaSeconds = Math.min((now - state.lastFrameTime) / 1000, 0.1);
+  state.lastFrameTime = now;
   if (state.currentAnimation && el.autoPlay.checked) {
     applyAnimation((getNow() - state.animationStartTime) * ANIMATION_FPS);
     updateFrameControls();
   }
+  updateKeyboardCamera(deltaSeconds);
+  updateMeshNameLabels();
   if (state.highlightedHelper) {
     state.highlightedHelper.visible = state.meshEntries[state.highlightedPartIndex]?.mesh?.visible ?? false;
     state.highlightedHelper.update();
+    updateHighlightInfo();
   }
   controls.update();
   renderer.render(scene, camera);
+}
+
+function updateKeyboardCamera(deltaSeconds) {
+  if (!state.cameraKeys.size) return;
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+  if (forward.lengthSq() < 0.0001) forward.set(0, 0, -1);
+  forward.normalize();
+  const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+  const move = new THREE.Vector3();
+  if (state.cameraKeys.has("w")) move.add(forward);
+  if (state.cameraKeys.has("s")) move.sub(forward);
+  if (state.cameraKeys.has("d")) move.add(right);
+  if (state.cameraKeys.has("a")) move.sub(right);
+  if (move.lengthSq() < 0.0001) return;
+  const distance = Math.max(camera.position.distanceTo(controls.target), 1);
+  move.normalize().multiplyScalar(distance * 0.9 * deltaSeconds);
+  camera.position.add(move);
+  controls.target.add(move);
 }
 
 function getNow() {

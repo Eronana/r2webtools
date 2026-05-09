@@ -26,11 +26,29 @@
               <button type="button" data-language="es">ES</button>
             </div>
           </div>
-          <div class="version-text">Build 2026.05.08.1436</div>
+          <div class="version-text">Build 2026.05.08.2318</div>
           <div class="contact-text">交流QQ群: 1094233945</div>
         </div>
+        <div id="highlightInfo" class="highlight-info" hidden></div>
+        <div id="meshNameOverlay" class="mesh-name-overlay" hidden></div>
       </section>
+      <div id="panelResizer" class="panel-resizer" aria-label="Resize panel"></div>
       <aside id="panel">
+        <div class="panel-block global-options">
+          <div class="submesh-title" data-i18n="globalOptions">Global options</div>
+          <div class="global-option-row">
+            <label><input id="showMeshNames" type="checkbox" /> <span data-i18n="meshNames">Mesh names</span></label>
+            <button id="resetModelPosition" type="button" disabled data-i18n="resetPosition">Reset position</button>
+            <button id="undoEdit" type="button" disabled data-i18n="undo">Undo</button>
+            <button id="redoEdit" type="button" disabled data-i18n="redo">Redo</button>
+          </div>
+          <div class="global-scale-row">
+            <label for="targetModelHeight" data-i18n="targetHeight">Target height</label>
+            <input id="targetModelHeight" type="number" value="280" min="0.001" step="0.1" />
+            <button id="scaleModelHeight" type="button" disabled data-i18n="scaleToHeight">Scale</button>
+          </div>
+        </div>
+
         <div class="panel-block">
           <label class="file-button">
             <input id="fileInput" type="file" accept=".zip,.pak,.md9,.ani,.obj,.mtl,.glb,.gltf,.bin,.dds,.png,.jpg,.jpeg,.webp" multiple />
@@ -41,6 +59,27 @@
             <span data-i18n="openFolder">Open folder</span>
           </label>
           <button id="saveModel" type="button" disabled data-i18n="saveMd9">Save MD9</button>
+        </div>
+
+        <div class="panel-block import-block">
+          <div class="submesh-title" data-i18n="importSkinnedGltf">Import skinned GLB / GLTF</div>
+          <div class="edit-grid">
+            <label for="skinVertexMode" data-i18n="vertexOwner">Vertex</label>
+            <select id="skinVertexMode">
+              <option value="maxWeight" data-i18n="ownerMaxWeight">Max weight</option>
+              <option value="firstWeight" data-i18n="ownerFirstWeight">First weight</option>
+            </select>
+            <label for="skinFaceMode" data-i18n="faceOwner">Triangle</label>
+            <select id="skinFaceMode">
+              <option value="maxTotalWeight" data-i18n="faceMaxTotalWeight">Max total weight</option>
+              <option value="majorityVertex" data-i18n="faceMajorityVertex">Vertex majority</option>
+              <option value="firstVertex" data-i18n="faceFirstVertex">First vertex</option>
+            </select>
+          </div>
+          <label class="file-button">
+            <input id="skinImportInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.dds" multiple />
+            <span data-i18n="importGltfButton">Import GLB / GLTF as MD9</span>
+          </label>
         </div>
 
         <div class="panel-block">
@@ -100,10 +139,14 @@
 
         <div class="panel-block">
           <div class="submesh-head">
-            <div class="submesh-title" data-i18n="parts">Parts</div>
+            <div class="submesh-title-row">
+              <div class="submesh-title" data-i18n="parts">Parts</div>
+              <input id="partFilter" class="part-filter" type="search" data-i18n-placeholder="filterParts" placeholder="Filter" disabled />
+            </div>
             <div class="submesh-head-actions">
               <button id="addPart" type="button" disabled data-i18n="addPart">Add part</button>
               <button id="duplicatePart" type="button" disabled data-i18n="duplicatePart">Duplicate part</button>
+              <button id="deletePart" type="button" disabled data-i18n="deletePart">Delete part</button>
               <button id="exportSelectedParts" type="button" disabled data-i18n="exportIntegrated">Export integrated</button>
             </div>
           </div>
@@ -128,17 +171,14 @@
           <div id="submeshList" class="submesh-list"></div>
         </div>
 
-        <div id="editorBlock" class="panel-block editor-block" hidden>
+        <div id="editorBlock" class="panel-block editor-block">
           <div class="editor-head">
             <div>
               <div class="submesh-title" data-i18n="editPart">Edit part</div>
               <strong id="editorName">-</strong>
             </div>
-            <button id="restorePart" type="button" data-i18n="restore">Restore</button>
-          </div>
-          <div class="editor-actions">
             <button id="clearPartMesh" type="button" data-i18n="clearMesh">Clear Mesh</button>
-            <button id="deletePart" type="button" data-i18n="deletePart">Delete part</button>
+            <button id="restorePart" type="button" data-i18n="restore">Restore</button>
           </div>
 
           <div class="edit-grid">
@@ -147,7 +187,13 @@
             <label for="editMaterial" data-i18n="material">Material</label>
             <select id="editMaterial"></select>
             <label for="editParent" data-i18n="parentPart">Parent</label>
-            <select id="editParent"></select>
+            <div class="parent-edit-control">
+              <select id="editParent"></select>
+              <label class="switch-row compact-switch">
+                <input id="keepWorldOnParentChange" type="checkbox" checked />
+                <span data-i18n="keepWorldPosition">Keep position</span>
+              </label>
+            </div>
           </div>
 
           <div class="transform-head">

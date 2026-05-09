@@ -34,7 +34,7 @@ body,
 
 #app {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 6px var(--panel-width, 420px);
 }
 
 #viewport {
@@ -47,6 +47,16 @@ body,
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.panel-resizer {
+  cursor: col-resize;
+  background: transparent;
+}
+
+.panel-resizer:hover,
+.panel-resizer.dragging {
+  background: rgb(84 198 166 / 32%);
 }
 
 .icon-button {
@@ -168,6 +178,19 @@ body,
   padding-top: 0;
 }
 
+.global-option-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.global-scale-row {
+  display: grid;
+  grid-template-columns: minmax(72px, max-content) minmax(0, 1fr) minmax(76px, max-content);
+  align-items: center;
+  gap: 8px;
+}
+
 label,
 .submesh-title {
   color: var(--muted);
@@ -179,7 +202,8 @@ select,
 button,
 .file-button,
 input[type="number"],
-input[type="text"] {
+input[type="text"],
+input[type="search"] {
   min-height: 36px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -190,7 +214,8 @@ input[type="text"] {
 
 select,
 input[type="number"],
-input[type="text"] {
+input[type="text"],
+input[type="search"] {
   width: 100%;
   padding: 0 10px;
 }
@@ -275,7 +300,8 @@ input[type="checkbox"] {
 }
 
 .stats strong {
-  max-width: 190px;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   color: var(--text);
   text-overflow: ellipsis;
@@ -299,7 +325,23 @@ input[type="checkbox"] {
 
 .submesh-head-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.submesh-title-row {
+  display: grid;
+  grid-template-columns: max-content minmax(72px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+}
+
+.part-filter {
+  min-height: 18px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 11px;
 }
 
 .submesh-head button {
@@ -310,7 +352,7 @@ input[type="checkbox"] {
 
 .submesh-row {
   display: grid;
-  grid-template-columns: max-content max-content minmax(90px, 1fr) 64px 56px;
+  grid-template-columns: max-content max-content 38px minmax(110px, 1fr) 64px 56px;
   align-items: center;
   gap: 8px;
 }
@@ -349,7 +391,7 @@ input[type="checkbox"] {
 }
 
 .submesh-list span {
-  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -365,6 +407,10 @@ input[type="checkbox"] {
   gap: 12px;
 }
 
+.editor-block.disabled {
+  opacity: 0.62;
+}
+
 .editor-head {
   display: flex;
   align-items: center;
@@ -372,9 +418,14 @@ input[type="checkbox"] {
   gap: 10px;
 }
 
+.editor-head > div {
+  min-width: 0;
+  flex: 1;
+}
+
 .editor-head strong {
   display: block;
-  max-width: 170px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -383,6 +434,53 @@ input[type="checkbox"] {
 .editor-head button {
   min-height: 32px;
   padding: 0 10px;
+}
+
+.highlight-info {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 4;
+  max-width: min(360px, calc(100% - 28px));
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: rgb(17 19 22 / 78%);
+  color: rgb(255 255 255 / 82%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.highlight-info strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mesh-name-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.mesh-name-label {
+  position: absolute;
+  max-width: 180px;
+  overflow: hidden;
+  color: rgb(255 255 255 / 82%);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  text-shadow:
+    0 1px 3px rgb(0 0 0 / 90%),
+    0 0 6px rgb(0 0 0 / 80%);
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
 }
 
 .editor-actions {
@@ -458,6 +556,17 @@ input[type="checkbox"] {
 
 .edit-grid label {
   color: var(--muted);
+}
+
+.parent-edit-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+}
+
+.compact-switch {
+  white-space: nowrap;
 }
 
 .transform-head {
@@ -582,7 +691,11 @@ input[type="checkbox"] {
 @media (max-width: 820px) {
   #app {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) 290px;
+    grid-template-rows: minmax(0, 1fr) 0 290px;
+  }
+
+  .panel-resizer {
+    display: none;
   }
 
   #panel {
