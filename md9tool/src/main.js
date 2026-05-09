@@ -23,6 +23,10 @@ const el = {
   skinImportInput: document.querySelector("#skinImportInput"),
   skinVertexMode: document.querySelector("#skinVertexMode"),
   skinFaceMode: document.querySelector("#skinFaceMode"),
+  skinCleanRemote: document.querySelector("#skinCleanRemote"),
+  skinRemoteK: document.querySelector("#skinRemoteK"),
+  skinJointSleeves: document.querySelector("#skinJointSleeves"),
+  skinSleeveLength: document.querySelector("#skinSleeveLength"),
   saveModel: document.querySelector("#saveModel"),
   modelSelect: document.querySelector("#modelSelect"),
   animationSelect: document.querySelector("#animationSelect"),
@@ -178,6 +182,9 @@ const I18N = {
     faceMaxTotalWeight: "Max total weight",
     faceMajorityVertex: "Vertex majority",
     faceFirstVertex: "First vertex",
+    cleanRemoteFaces: "Clean remote",
+    jointSleeves: "Smooth joints",
+    sleeveLength: "Length",
     importGltfButton: "Import GLB / GLTF as MD9",
     partName: "Name",
     batchExport: "Export ZIP",
@@ -302,6 +309,9 @@ const I18N = {
     faceMaxTotalWeight: "权重总和最大",
     faceMajorityVertex: "顶点多数",
     faceFirstVertex: "首顶点",
+    cleanRemoteFaces: "清理远面",
+    jointSleeves: "平滑连接",
+    sleeveLength: "长度",
     importGltfButton: "导入 GLB / GLTF 为 MD9",
     partName: "名称",
     batchExport: "批量导出",
@@ -426,6 +436,9 @@ const I18N = {
     faceMaxTotalWeight: "Peso total max.",
     faceMajorityVertex: "Mayoria vert.",
     faceFirstVertex: "Primer vert.",
+    cleanRemoteFaces: "Limpiar remoto",
+    jointSleeves: "Suavizar juntas",
+    sleeveLength: "Longitud",
     importGltfButton: "Importar GLB / GLTF a MD9",
     partName: "Nombre",
     batchExport: "Exportar ZIP",
@@ -3002,7 +3015,12 @@ async function importSkinnedGltfFiles(files) {
     setStatus(t("loadingModel", { name: modelFile.name }));
     const model = await createMd9FromSkinnedGltf(modelFile, files, {
       vertexMode: el.skinVertexMode.value,
-      faceMode: el.skinFaceMode.value
+      faceMode: el.skinFaceMode.value,
+      cleanRemoteFaces: el.skinCleanRemote.checked,
+      remoteK: Number(el.skinRemoteK.value) || 3,
+      remoteVolumeRatio: 0.15,
+      jointSleeves: el.skinJointSleeves.checked,
+      sleeveLength: Number(el.skinSleeveLength.value) || 0.12
     });
     const id = `generated:${model.name}:${Date.now()}`;
     state.md9Files.push({ id, label: model.name, model });
@@ -3302,7 +3320,7 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
 
   let bones = [...boneSet];
   let boneIndex = new Map(bones.map((bone, index) => [bone, index]));
-  const partBuckets = bones.map(() => ({ positions: [], normals: [], uvs: [], indices: [], uvSourceIds: [] }));
+  const partBuckets = bones.map(() => createPartBucket());
   const textureSources = [];
   const vertexRefSources = [];
   const zeroUv = new THREE.Vector2();
@@ -3310,11 +3328,17 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
   for (const mesh of skinnedMeshes) {
     appendSkinnedMeshAsRigidParts(mesh, files, bones, boneIndex, partBuckets, textureSources, vertexRefSources, zeroUv, options);
   }
+  if (options.cleanRemoteFaces) {
+    filterRemoteIsolatedTriangles(bones, partBuckets, vertexRefSources, options);
+  }
   const pruned = pruneEmptyBones(bones, partBuckets);
   bones = pruned.bones;
   boneIndex = new Map(bones.map((bone, index) => [bone, index]));
   const activeBuckets = pruned.buckets;
   for (const ref of vertexRefSources) ref.partIndex = pruned.indexMap.get(ref.partIndex);
+  if (options.jointSleeves) {
+    addJointSleeves(bones, activeBuckets, vertexRefSources, options, pruned.parentIds);
+  }
   const activeVertexRefs = vertexRefSources.filter((ref) => ref.partIndex !== undefined);
 
   let material = createMd9MaterialFromThree(null, "", null, { newFormat: true });
@@ -3362,6 +3386,10 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
   return model;
 }
 
+function createPartBucket() {
+  return { positions: [], normals: [], uvs: [], indices: [], uvSourceIds: [], triangleInfluences: [], triangleSourceIds: [] };
+}
+
 function appendSkinnedMeshAsRigidParts(mesh, files, bones, boneIndex, partBuckets, textureSources, vertexRefSources, zeroUv, options) {
   const geometry = mesh.geometry.getAttribute("normal") ? mesh.geometry : mesh.geometry.clone();
   if (!geometry.getAttribute("normal")) geometry.computeVertexNormals();
@@ -3389,6 +3417,7 @@ function appendSkinnedMeshAsRigidParts(mesh, files, bones, boneIndex, partBucket
     const bucket = partBuckets[owner];
     const sourceId = registerTextureSource(textureSources, materialForDraw(drawIndex), files);
     const start = bucket.positions.length / 3;
+    const influenceTotals = getTriangleInfluenceTotals(mesh, skinIndex, skinWeight, vertexIndices, boneIndex);
     inverseBoneWorld.copy(bones[owner].matrixWorld).invert();
     for (const vertexIndex of vertexIndices) {
       getGltfWorldVertex(mesh, geometry, position, vertexIndex, vertex).applyMatrix4(inverseBoneWorld);
@@ -3403,6 +3432,8 @@ function appendSkinnedMeshAsRigidParts(mesh, files, bones, boneIndex, partBucket
       if (sourceId >= 0) vertexRefSources.push({ partIndex: owner, uvOffset, sourceId, u: wrapUv(u), v: wrapUv(v) });
     }
     bucket.indices.push(start, start + 1, start + 2);
+    bucket.triangleInfluences.push(influenceTotals);
+    bucket.triangleSourceIds.push(sourceId);
   }
   if (geometry !== mesh.geometry) geometry.dispose();
 }
@@ -3432,6 +3463,351 @@ function pruneEmptyBones(bones, buckets) {
   return { bones: kept, buckets: keptBuckets, indexMap, parentIds };
 }
 
+function filterRemoteIsolatedTriangles(bones, buckets, vertexRefSources, options) {
+  const k = Math.max(0.1, options.remoteK || 3);
+  for (const [partIndex, bucket] of buckets.entries()) {
+    const triangleCount = bucket.indices.length / 3;
+    if (triangleCount <= 1) continue;
+    const components = getBucketTriangleComponents(bucket);
+    if (components.length <= 1) continue;
+    const totalVolume = components.reduce((sum, component) => sum + component.measure, 0);
+    const d = Math.cbrt(Math.max(totalVolume, 1e-9));
+    const closest = components.reduce((best, component) => (component.distance < best.distance ? component : best), components[0]);
+    const keepTriangles = new Set();
+    for (const component of components) {
+      const tooFar = component.distance > k * d;
+      if (component === closest || !tooFar) {
+        for (const triangleIndex of component.triangles) keepTriangles.add(triangleIndex);
+      } else {
+        reassignRemoteComponent(component, partIndex, bones, buckets, vertexRefSources);
+      }
+    }
+    if (keepTriangles.size !== triangleCount) {
+      rebuildBucketTriangles(bucket, keepTriangles, vertexRefSources, partIndex);
+    }
+  }
+}
+
+function reassignRemoteComponent(component, sourceIndex, bones, buckets, vertexRefSources) {
+  const targetIndex = chooseRemoteComponentTarget(component, sourceIndex, bones, buckets);
+  if (targetIndex < 0 || targetIndex === sourceIndex) return;
+  for (const triangleIndex of component.triangles) {
+    appendTriangleToTargetBucket(buckets[sourceIndex], triangleIndex, sourceIndex, buckets[targetIndex], targetIndex, bones, vertexRefSources);
+  }
+}
+
+function chooseRemoteComponentTarget(component, sourceIndex, bones, buckets) {
+  const center = component.box.getCenter(new THREE.Vector3()).applyMatrix4(bones[sourceIndex].matrixWorld);
+  const candidates = new Set();
+  for (const triangleIndex of component.triangles) {
+    for (const index of buckets[sourceIndex].triangleInfluences[triangleIndex]?.keys?.() || []) {
+      if (index !== sourceIndex && buckets[index]?.positions.length) candidates.add(index);
+    }
+  }
+  const primary = chooseNearestBoneIndex(center, candidates, bones);
+  if (primary >= 0) return primary;
+  return chooseNearestBoneIndex(center, buckets.map((bucket, index) => (index !== sourceIndex && bucket.positions.length ? index : -1)).filter((index) => index >= 0), bones);
+}
+
+function chooseNearestBoneIndex(worldPoint, candidateIndices, bones) {
+  let bestIndex = -1;
+  let bestDistance = Infinity;
+  const bonePosition = new THREE.Vector3();
+  for (const index of candidateIndices) {
+    bonePosition.setFromMatrixPosition(bones[index].matrixWorld);
+    const distance = bonePosition.distanceToSquared(worldPoint);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
+function appendTriangleToTargetBucket(sourceBucket, triangleIndex, sourceIndex, targetBucket, targetIndex, bones, vertexRefSources) {
+  const sourceWorld = bones[sourceIndex].matrixWorld;
+  const targetInverseWorld = new THREE.Matrix4().copy(bones[targetIndex].matrixWorld).invert();
+  const normalMatrix = new THREE.Matrix3().getNormalMatrix(new THREE.Matrix4().multiplyMatrices(targetInverseWorld, sourceWorld));
+  const point = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const start = targetBucket.positions.length / 3;
+  const sourceId = sourceBucket.triangleSourceIds[triangleIndex];
+  for (let corner = 0; corner < 3; corner++) {
+    const vertexIndex = sourceBucket.indices[triangleIndex * 3 + corner];
+    point
+      .set(sourceBucket.positions[vertexIndex * 3], sourceBucket.positions[vertexIndex * 3 + 1], sourceBucket.positions[vertexIndex * 3 + 2])
+      .applyMatrix4(sourceWorld)
+      .applyMatrix4(targetInverseWorld);
+    normal
+      .set(sourceBucket.normals[vertexIndex * 3], sourceBucket.normals[vertexIndex * 3 + 1], sourceBucket.normals[vertexIndex * 3 + 2])
+      .applyMatrix3(normalMatrix)
+      .normalize();
+    targetBucket.positions.push(point.x, point.y, point.z);
+    targetBucket.normals.push(normal.x, normal.y, normal.z);
+    const u = sourceBucket.uvs[vertexIndex * 2];
+    const v = sourceBucket.uvs[vertexIndex * 2 + 1];
+    const uvOffset = targetBucket.uvs.length;
+    targetBucket.uvs.push(u, v);
+    if (sourceId >= 0) vertexRefSources.push({ partIndex: targetIndex, uvOffset, sourceId, u: wrapUv(u), v: wrapUv(v) });
+  }
+  targetBucket.indices.push(start, start + 1, start + 2);
+  targetBucket.triangleInfluences.push(sourceBucket.triangleInfluences[triangleIndex]);
+  targetBucket.triangleSourceIds.push(sourceId);
+}
+
+function getBucketTriangleComponents(bucket) {
+  const triangleCount = bucket.indices.length / 3;
+  const parent = Array.from({ length: triangleCount }, (_, index) => index);
+  const find = (value) => {
+    while (parent[value] !== value) {
+      parent[value] = parent[parent[value]];
+      value = parent[value];
+    }
+    return value;
+  };
+  const union = (a, b) => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent[rootB] = rootA;
+  };
+  const vertexToTriangles = new Map();
+  for (let tri = 0; tri < triangleCount; tri++) {
+    for (let corner = 0; corner < 3; corner++) {
+      const vertexIndex = bucket.indices[tri * 3 + corner];
+      const key = positionKey(bucket.positions, vertexIndex);
+      const previous = vertexToTriangles.get(key);
+      if (previous !== undefined) union(tri, previous);
+      vertexToTriangles.set(key, tri);
+    }
+  }
+  const groups = new Map();
+  for (let tri = 0; tri < triangleCount; tri++) {
+    const root = find(tri);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(tri);
+  }
+  const origin = new THREE.Vector3();
+  return [...groups.values()].map((triangles) => {
+    const box = new THREE.Box3();
+    const point = new THREE.Vector3();
+    for (const tri of triangles) {
+      for (let corner = 0; corner < 3; corner++) {
+        const vertexIndex = bucket.indices[tri * 3 + corner];
+        point.set(bucket.positions[vertexIndex * 3], bucket.positions[vertexIndex * 3 + 1], bucket.positions[vertexIndex * 3 + 2]);
+        box.expandByPoint(point);
+      }
+    }
+    const size = box.getSize(new THREE.Vector3());
+    const volume = size.x * size.y * size.z;
+    const maxSize = Math.max(size.x, size.y, size.z, 1e-6);
+    const measure = Math.max(volume, Math.pow(maxSize, 3) * 0.02);
+    const closest = box.clampPoint(origin, new THREE.Vector3());
+    return { triangles, box, measure, distance: closest.distanceTo(origin) };
+  });
+}
+
+function positionKey(positions, vertexIndex) {
+  const scale = 100000;
+  return `${Math.round(positions[vertexIndex * 3] * scale)}:${Math.round(positions[vertexIndex * 3 + 1] * scale)}:${Math.round(positions[vertexIndex * 3 + 2] * scale)}`;
+}
+
+function rebuildBucketTriangles(bucket, keepTriangles, vertexRefSources, partIndex) {
+  const oldUvToNew = new Map();
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indices = [];
+  const triangleInfluences = [];
+  const triangleSourceIds = [];
+  for (let oldTri = 0; oldTri < bucket.indices.length / 3; oldTri++) {
+    if (!keepTriangles.has(oldTri)) continue;
+    const start = positions.length / 3;
+    for (let corner = 0; corner < 3; corner++) {
+      const oldVertex = bucket.indices[oldTri * 3 + corner];
+      const newVertex = start + corner;
+      positions.push(bucket.positions[oldVertex * 3], bucket.positions[oldVertex * 3 + 1], bucket.positions[oldVertex * 3 + 2]);
+      normals.push(bucket.normals[oldVertex * 3], bucket.normals[oldVertex * 3 + 1], bucket.normals[oldVertex * 3 + 2]);
+      uvs.push(bucket.uvs[oldVertex * 2], bucket.uvs[oldVertex * 2 + 1]);
+      oldUvToNew.set(oldVertex * 2, newVertex * 2);
+    }
+    indices.push(start, start + 1, start + 2);
+    triangleInfluences.push(bucket.triangleInfluences[oldTri]);
+    triangleSourceIds.push(bucket.triangleSourceIds[oldTri]);
+  }
+  for (const ref of vertexRefSources) {
+    if (ref.partIndex !== partIndex) continue;
+    const nextOffset = oldUvToNew.get(ref.uvOffset);
+    if (nextOffset === undefined) {
+      ref.partIndex = undefined;
+    } else {
+      ref.uvOffset = nextOffset;
+    }
+  }
+  bucket.positions = positions;
+  bucket.normals = normals;
+  bucket.uvs = uvs;
+  bucket.indices = indices;
+  bucket.triangleInfluences = triangleInfluences;
+  bucket.triangleSourceIds = triangleSourceIds;
+}
+
+function addJointSleeves(bones, buckets, vertexRefSources, options, parentIds = null) {
+  for (const [childIndex, bone] of bones.entries()) {
+    const parentIndex = parentIds ? parentIds[childIndex] : bones.indexOf(bone.parent);
+    if (parentIndex < 0) continue;
+    addSleeveTowardBone(buckets[childIndex], childIndex, parentIndex, bones, buckets, vertexRefSources, options);
+    addSleeveTowardBone(buckets[parentIndex], parentIndex, childIndex, bones, buckets, vertexRefSources, options);
+  }
+}
+
+function addSleeveTowardBone(bucket, bucketIndex, targetBoneIndex, bones, buckets, vertexRefSources, options) {
+  if (!bucket?.positions.length) return;
+  const targetBucket = buckets[targetBoneIndex];
+  if (!targetBucket?.positions.length) return;
+  const edges = getBoundaryEdges(bucket);
+  if (!edges.length) return;
+  const bucketWorldInverse = new THREE.Matrix4().copy(bones[bucketIndex].matrixWorld).invert();
+  const targetLocal = new THREE.Vector3()
+    .setFromMatrixPosition(bones[targetBoneIndex].matrixWorld)
+    .applyMatrix4(bucketWorldInverse);
+  const partLength = computeDirectionalPartLength(bucket, targetLocal);
+  const radius = partLength * 0.12;
+  const extensionLength = partLength * Math.max(0.01, Math.min(1, options.sleeveLength ?? 0.12));
+  const targetBoxLocal = computeBucketBoxInLocal(targetBucket, bones[targetBoneIndex], bucketWorldInverse);
+  const padding = Math.max(partLength * 0.03, extensionLength * 0.25, 0.001);
+  targetBoxLocal.expandByScalar(padding);
+  for (const edge of selectNearestBoundaryEdges(edges, bucket, targetLocal, radius)) {
+    appendSleeveForBoundaryEdge(bucket, edge, targetLocal, extensionLength, targetBoxLocal, vertexRefSources, bucketIndex);
+  }
+}
+
+function computeDirectionalPartLength(bucket, targetLocal) {
+  const direction = targetLocal.clone();
+  if (direction.lengthSq() <= 1e-8) {
+    return Math.max(...computeArrayBox(new Float32Array(bucket.positions)).getSize(new THREE.Vector3()).toArray(), 1e-6);
+  }
+  direction.normalize();
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < bucket.positions.length; i += 3) {
+    const projection = bucket.positions[i] * direction.x + bucket.positions[i + 1] * direction.y + bucket.positions[i + 2] * direction.z;
+    min = Math.min(min, projection);
+    max = Math.max(max, projection);
+  }
+  const projectedLength = max - min;
+  if (projectedLength > 1e-6) return projectedLength;
+  return Math.max(...computeArrayBox(new Float32Array(bucket.positions)).getSize(new THREE.Vector3()).toArray(), 1e-6);
+}
+
+function computeBucketBoxInLocal(bucket, bone, targetLocalInverse) {
+  const box = new THREE.Box3();
+  const point = new THREE.Vector3();
+  const transform = new THREE.Matrix4().multiplyMatrices(targetLocalInverse, bone.matrixWorld);
+  for (let i = 0; i < bucket.positions.length; i += 3) {
+    point.set(bucket.positions[i], bucket.positions[i + 1], bucket.positions[i + 2]).applyMatrix4(transform);
+    box.expandByPoint(point);
+  }
+  return box;
+}
+
+function getBoundaryEdges(bucket) {
+  const edges = new Map();
+  for (let tri = 0; tri < bucket.indices.length / 3; tri++) {
+    const ids = [bucket.indices[tri * 3], bucket.indices[tri * 3 + 1], bucket.indices[tri * 3 + 2]];
+    for (const [a, b] of [[ids[0], ids[1]], [ids[1], ids[2]], [ids[2], ids[0]]]) {
+      const key = [positionKey(bucket.positions, a), positionKey(bucket.positions, b)].sort().join("|");
+      const existing = edges.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        edges.set(key, { a, b, triangleIndex: tri, count: 1 });
+      }
+    }
+  }
+  return [...edges.values()].filter((edge) => edge.count === 1);
+}
+
+function selectNearestBoundaryEdges(edges, bucket, targetLocal, radius) {
+  const midpoint = new THREE.Vector3();
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const ranked = edges.map((edge) => {
+    a.set(
+      bucket.positions[edge.a * 3],
+      bucket.positions[edge.a * 3 + 1],
+      bucket.positions[edge.a * 3 + 2]
+    );
+    b.set(
+      bucket.positions[edge.b * 3],
+      bucket.positions[edge.b * 3 + 1],
+      bucket.positions[edge.b * 3 + 2]
+    );
+    midpoint
+      .set(
+        (a.x + b.x) * 0.5,
+        (a.y + b.y) * 0.5,
+        (a.z + b.z) * 0.5
+      );
+    return { edge, distance: midpoint.distanceTo(targetLocal), length: a.distanceTo(b) };
+  }).sort((a, b) => a.distance - b.distance);
+  if (!ranked.length) return [];
+  const averageLength = ranked.reduce((sum, item) => sum + item.length, 0) / ranked.length;
+  const threshold = ranked[0].distance + Math.max(radius * 0.35, averageLength * 2, 0.001);
+  return ranked.filter((item) => item.distance <= threshold).slice(0, 48).map((item) => item.edge);
+}
+
+function appendSleeveForBoundaryEdge(bucket, edge, targetLocal, extensionLength, targetBoxLocal, vertexRefSources, bucketIndex) {
+  const sourceId = bucket.triangleSourceIds[edge.triangleIndex];
+  const base = bucket.positions.length / 3;
+  const addVertex = (sourceVertex, offsetScale, shrinkScale) => {
+    const source = new THREE.Vector3(
+      bucket.positions[sourceVertex * 3],
+      bucket.positions[sourceVertex * 3 + 1],
+      bucket.positions[sourceVertex * 3 + 2]
+    );
+    const direction = targetLocal.clone().sub(source);
+    if (direction.lengthSq() > 1e-8) direction.normalize();
+    const point = source.addScaledVector(direction, extensionLength * offsetScale);
+    if (shrinkScale < 1) {
+      point.sub(targetLocal).multiplyScalar(shrinkScale).add(targetLocal);
+    }
+    const normal = new THREE.Vector3(
+      bucket.normals[sourceVertex * 3],
+      bucket.normals[sourceVertex * 3 + 1],
+      bucket.normals[sourceVertex * 3 + 2]
+    ).normalize();
+    const uvOffset = bucket.uvs.length;
+    bucket.positions.push(point.x, point.y, point.z);
+    bucket.normals.push(normal.x, normal.y, normal.z);
+    const u = bucket.uvs[sourceVertex * 2];
+    const v = bucket.uvs[sourceVertex * 2 + 1];
+    bucket.uvs.push(u, v);
+    if (sourceId >= 0) vertexRefSources.push({ partIndex: bucketIndex, uvOffset, sourceId, u: wrapUv(u), v: wrapUv(v) });
+  };
+  addVertex(edge.a, 0.45, 0.9);
+  addVertex(edge.b, 0.45, 0.9);
+  addVertex(edge.a, 1, 0.62);
+  addVertex(edge.b, 1, 0.62);
+  appendHiddenSleeveTriangle(bucket, [edge.a, edge.b, base + 1], targetBoxLocal, sourceId);
+  appendHiddenSleeveTriangle(bucket, [edge.a, base + 1, base], targetBoxLocal, sourceId);
+  appendHiddenSleeveTriangle(bucket, [base, base + 1, base + 3], targetBoxLocal, sourceId);
+  appendHiddenSleeveTriangle(bucket, [base, base + 3, base + 2], targetBoxLocal, sourceId);
+}
+
+function appendHiddenSleeveTriangle(bucket, ids, targetBoxLocal, sourceId) {
+  const centroid = new THREE.Vector3();
+  for (const id of ids) {
+    centroid.x += bucket.positions[id * 3];
+    centroid.y += bucket.positions[id * 3 + 1];
+    centroid.z += bucket.positions[id * 3 + 2];
+  }
+  centroid.multiplyScalar(1 / 3);
+  if (!targetBoxLocal.containsPoint(centroid)) return;
+  bucket.indices.push(...ids);
+  bucket.triangleInfluences.push(null);
+  bucket.triangleSourceIds.push(sourceId);
+}
+
 function chooseTriangleOwner(mesh, skinIndex, skinWeight, vertexIndices, boneIndex, options) {
   const owners = vertexIndices.map((vertexIndex) => chooseVertexOwner(mesh, skinIndex, skinWeight, vertexIndex, boneIndex, options.vertexMode));
   if (options.faceMode === "firstVertex") return owners[0];
@@ -3457,6 +3833,16 @@ function chooseTriangleOwner(mesh, skinIndex, skinWeight, vertexIndices, boneInd
     if (weight > (totals.get(best) || 0)) best = index;
   }
   return best;
+}
+
+function getTriangleInfluenceTotals(mesh, skinIndex, skinWeight, vertexIndices, boneIndex) {
+  const totals = new Map();
+  for (const vertexIndex of vertexIndices) {
+    for (const influence of getVertexInfluences(mesh, skinIndex, skinWeight, vertexIndex, boneIndex)) {
+      totals.set(influence.index, (totals.get(influence.index) || 0) + influence.weight);
+    }
+  }
+  return totals;
 }
 
 function chooseVertexOwner(mesh, skinIndex, skinWeight, vertexIndex, boneIndex, mode) {
