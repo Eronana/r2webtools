@@ -39,11 +39,20 @@ body,
 
 #viewport {
   position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
 }
 
-#viewport canvas {
+.viewer-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.viewer-canvas canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -222,21 +231,14 @@ input[type="search"] {
 
 .select-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 64px;
+  grid-template-columns: minmax(0, 1fr) 64px 64px;
   gap: 8px;
 }
 
-.timeline-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 56px;
-  align-items: center;
-  gap: 8px;
-}
-
-.timeline-row span {
-  color: var(--muted);
-  font-size: 12px;
-  text-align: right;
+.select-row button {
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 8px;
   white-space: nowrap;
 }
 
@@ -439,7 +441,7 @@ input[type="checkbox"] {
 .highlight-info {
   position: absolute;
   right: 14px;
-  bottom: 14px;
+  top: 14px;
   z-index: 4;
   max-width: min(360px, calc(100% - 28px));
   border-radius: 6px;
@@ -481,6 +483,298 @@ input[type="checkbox"] {
     0 0 6px rgb(0 0 0 / 80%);
   transform: translate(-50%, -50%);
   white-space: nowrap;
+}
+
+.ani-timeline-panel {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-width: 1px 0 0;
+  border-radius: 0;
+  background: rgb(18 22 26 / 96%);
+  padding: 10px;
+  z-index: 3;
+}
+
+.ani-timeline-panel.disabled {
+  opacity: 0.62;
+}
+
+.ani-timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ani-timeline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.ani-timeline-head input[type="number"] {
+  width: 86px;
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.ani-timeline-head button {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.ani-time-slider {
+  width: 100%;
+}
+
+#frameLabel {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.ani-timeline {
+  position: relative;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      rgb(255 255 255 / 7%) 0,
+      rgb(255 255 255 / 7%) 1px,
+      transparent 1px,
+      transparent var(--snap-step, 100%)
+    ),
+    #101418;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.ani-timeline-progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: rgb(84 198 166 / 16%);
+  pointer-events: none;
+}
+
+.ani-timeline-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--accent);
+  transform: translateX(-0.5px);
+  pointer-events: none;
+}
+
+.ani-key-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.ani-key {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.ani-key::before,
+.ani-key::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.ani-key::before {
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 1px;
+  background: var(--warn);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.ani-key::after {
+  top: -14px;
+  width: 1px;
+  height: 36px;
+  background: rgb(255 255 255 / 38%);
+  z-index: -1;
+}
+
+.ani-key.active {
+  background: transparent;
+}
+
+.ani-key.active::before {
+  background: #ff6aa8;
+  border-color: #fff;
+}
+
+.ani-key.active {
+  cursor: grab;
+}
+
+.ani-key-editor {
+  position: absolute;
+  left: 10px;
+  bottom: calc(100% + 2px);
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 180px 320px;
+  gap: 10px;
+  width: min(560px, calc(100vw - var(--panel-width, 420px) - 48px));
+  overflow: visible;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgb(20 24 29 / 98%);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 38%);
+  padding: 10px;
+  cursor: move;
+}
+
+.ani-key-editor.disabled {
+  opacity: 0.64;
+}
+
+.ani-key-parts,
+.ani-key-transform {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ani-key-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  min-height: 28px;
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.ani-key-transform-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 116px;
+  align-items: center;
+  gap: 8px;
+}
+
+.ani-key-transform-head label {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.ani-key-transform-head input {
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.ani-editor-title {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ani-key-part-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ani-key-part,
+#aniDeleteKey {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.ani-key-part {
+  display: block;
+  overflow: hidden;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ani-key-part.has-key {
+  border-color: color-mix(in srgb, var(--accent), var(--line) 28%);
+  color: var(--accent);
+}
+
+.ani-key-part.active {
+  background: var(--accent);
+  color: #07110f;
+  border-color: transparent;
+}
+
+.ani-key-part span {
+  font-weight: 900;
+}
+
+.ani-transform-editor {
+  display: grid;
+  gap: 6px;
+}
+
+.ani-transform-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+}
+
+.ani-transform-block > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ani-transform-axes {
+  display: grid;
+  gap: 5px;
+}
+
+.ani-transform-row {
+  grid-template-columns: 34px minmax(0, 1fr) 72px;
+}
+
+.ani-transform-axes input[type="number"] {
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 12px;
 }
 
 .editor-actions {
@@ -702,7 +996,7 @@ input[type="checkbox"] {
 
 #status {
   position: fixed;
-  left: 14px;
+  right: calc(var(--panel-width, 420px) + 20px);
   bottom: 14px;
   max-width: min(620px, calc(100vw - 360px));
   border: 1px solid var(--line);
@@ -711,6 +1005,7 @@ input[type="checkbox"] {
   color: var(--text);
   padding: 9px 12px;
   font-size: 13px;
+  text-align: right;
   pointer-events: none;
 }
 
@@ -749,6 +1044,7 @@ input[type="checkbox"] {
   }
 
   #status {
+    right: 14px;
     max-width: calc(100vw - 28px);
     bottom: 304px;
   }

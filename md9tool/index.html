@@ -17,6 +17,7 @@
   <body>
     <main id="app">
       <section id="viewport" aria-label="MD9 viewport">
+        <div id="viewerCanvas" class="viewer-canvas"></div>
         <div class="viewport-tools">
           <div class="viewport-tool-row">
             <button id="helpButton" class="icon-button help-button" type="button" title="Help" aria-label="Help">?</button>
@@ -26,11 +27,43 @@
               <button type="button" data-language="es">ES</button>
             </div>
           </div>
-          <div class="version-text">Build 2026.05.10.0217</div>
+          <div class="version-text">Build 2026.05.10.0436</div>
           <div class="contact-text">交流QQ群: 1094233945</div>
         </div>
         <div id="highlightInfo" class="highlight-info" hidden></div>
         <div id="meshNameOverlay" class="mesh-name-overlay" hidden></div>
+        <div id="aniTimelinePanel" class="ani-timeline-panel" hidden>
+          <div class="ani-timeline-head">
+            <label><input id="autoPlay" type="checkbox" checked /> <span data-i18n="autoPlay">Auto play</span></label>
+            <span id="frameLabel">0 / 0</span>
+            <div class="ani-timeline-actions">
+              <label class="switch-row"><input id="aniSnapKeys" type="checkbox" checked /> <span data-i18n="snapKeys">Snap</span></label>
+              <input id="aniSnapStep" type="number" value="1.0" min="0.0001" step="0.01" />
+              <button id="aniAddKey" type="button" data-i18n="addKey">Add key</button>
+            </div>
+          </div>
+          <input id="aniTimeSlider" class="ani-time-slider" type="range" min="0" max="1" value="0" step="0.01" />
+          <div id="aniTimeline" class="ani-timeline" role="slider" aria-label="Animation timeline">
+            <div id="aniTimelineProgress" class="ani-timeline-progress"></div>
+            <span id="aniTimelineCursor" class="ani-timeline-cursor"></span>
+            <div id="aniKeyLayer" class="ani-key-layer"></div>
+          </div>
+          <div id="aniKeyEditor" class="ani-key-editor">
+            <button id="aniCloseKeyEditor" class="icon-button ani-key-close" type="button" aria-label="Close">×</button>
+            <div class="ani-key-parts">
+              <button id="aniDeleteKey" type="button" data-i18n="deleteKey">Delete key</button>
+              <div class="ani-editor-title" data-i18n="keyParts">Key parts</div>
+              <div id="aniKeyPartList" class="ani-key-part-list"></div>
+            </div>
+            <div class="ani-key-transform">
+              <div class="ani-key-transform-head">
+                <div class="ani-editor-title" id="aniKeyTransformTitle">-</div>
+                <label><span data-i18n="time">Time</span><input id="aniKeyTimeInput" type="number" step="0.01" /></label>
+              </div>
+              <div id="aniTransformEditor" class="ani-transform-editor"></div>
+            </div>
+          </div>
+        </div>
       </section>
       <div id="panelResizer" class="panel-resizer" aria-label="Resize panel"></div>
       <aside id="panel">
@@ -58,7 +91,6 @@
             <input id="folderInput" type="file" webkitdirectory multiple />
             <span data-i18n="openFolder">Open folder</span>
           </label>
-          <button id="saveModel" type="button" disabled data-i18n="saveMd9">Save MD9</button>
         </div>
 
         <div class="panel-block import-block">
@@ -102,6 +134,7 @@
               <option value="" data-i18n="noMd9Loaded">No MD9 loaded</option>
             </select>
             <button id="clearModels" type="button" disabled data-i18n="clear">Clear</button>
+            <button id="saveModel" type="button" disabled data-i18n="saveMd9">Save MD9</button>
           </div>
         </div>
 
@@ -112,14 +145,7 @@
               <option value="" data-i18n="defaultPose">Default pose</option>
             </select>
             <button id="clearAnimations" type="button" disabled data-i18n="clear">Clear</button>
-          </div>
-        </div>
-
-        <div class="panel-block">
-          <label><input id="autoPlay" type="checkbox" checked /> <span data-i18n="autoPlay">Auto play</span></label>
-          <div class="timeline-row">
-            <input id="animationFrame" type="range" min="0" max="1" value="0" step="0.1" disabled />
-            <span id="frameLabel">0 / 0</span>
+            <button id="saveAnimation" type="button" disabled data-i18n="saveAni">Save ANI</button>
           </div>
         </div>
 
