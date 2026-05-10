@@ -5,6 +5,7 @@ import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import { TGALoader } from "three/addons/loaders/TGALoader.js";
 import { readPakFromBuffer } from "./pak.js";
 
 const el = {
@@ -114,6 +115,7 @@ scene.add(grid);
 
 const ddsLoader = new DDSLoader();
 const textureLoader = new THREE.TextureLoader();
+const tgaLoader = new TGALoader();
 const clock = new THREE.Clock();
 const ANIMATION_FPS = 90;
 // Highlight color candidates:
@@ -129,6 +131,7 @@ const DDS_SAFE_UPSCALE_LIMIT = 128;
 const DDS_PALETTE_UPSCALE_MAX_PIXELS = 65536;
 const DDS_PALETTE_UNIQUE_COLOR_LIMIT = 256;
 const DDS_SAFE_UPSCALE_FACTOR = 4;
+const TEXTURE_FILE_PATTERN = /\.(dds|png|jpe?g|webp|bmp|gif|avif|tga)$/i;
 const SQUISH_DXT3 = 1 << 1;
 const SQUISH_COLOUR_METRIC_UNIFORM = 1 << 6;
 const SQUISH_WEIGHT_COLOUR_BY_ALPHA = 1 << 7;
@@ -138,7 +141,7 @@ const MIN_PANEL_WIDTH = 340;
 const MAX_PANEL_WIDTH = 760;
 const I18N = {
   en: {
-    openFiles: "Open MD9 / ANI / model / textures",
+    openFiles: "Open model / textures / animations",
     openFolder: "Open folder",
     saveMd9: "Save MD9",
     currentModel: "Current model",
@@ -210,7 +213,7 @@ const I18N = {
     keepWorldPosition: "Keep position",
     transform: "Transform",
     matrixMode: "Matrix",
-    replaceModel: "Replace OBJ / GLB / GLTF",
+    replaceModel: "Replace model",
     replaceKeepSize: "Keep size",
     replaceHint: "Drop obj/mtl or glb/gltf/bin with textures here",
     chooseMd9: "Choose an MD9 file",
@@ -269,7 +272,7 @@ const I18N = {
     helpLoadFailed: "Failed to load help: {message}"
   },
   zh: {
-    openFiles: "打开 MD9 / ANI / 模型 / 贴图",
+    openFiles: "打开 模型 / 贴图 / 动画",
     openFolder: "打开目录",
     saveMd9: "保存 MD9",
     currentModel: "当前模型",
@@ -341,7 +344,7 @@ const I18N = {
     keepWorldPosition: "保持位置",
     transform: "变换",
     matrixMode: "矩阵",
-    replaceModel: "替换 OBJ / GLB / GLTF",
+    replaceModel: "替换模型",
     replaceKeepSize: "保持大小",
     replaceHint: "可把 obj/mtl 或 glb/gltf/bin 和贴图一起拖入页面",
     chooseMd9: "选择一个 md9 文件",
@@ -400,7 +403,7 @@ const I18N = {
     helpLoadFailed: "使用说明加载失败: {message}"
   },
   es: {
-    openFiles: "Abrir MD9 / ANI / modelo / texturas",
+    openFiles: "Abrir modelo / texturas / animaciones",
     openFolder: "Abrir carpeta",
     saveMd9: "Guardar MD9",
     currentModel: "Modelo actual",
@@ -472,7 +475,7 @@ const I18N = {
     keepWorldPosition: "Mantener pos.",
     transform: "Transformacion",
     matrixMode: "Matriz",
-    replaceModel: "Reemplazar OBJ / GLB / GLTF",
+    replaceModel: "Reemplazar modelo",
     replaceKeepSize: "Mantener tamano",
     replaceHint: "Suelta obj/mtl o glb/gltf/bin con texturas aqui",
     chooseMd9: "Elige un archivo MD9",
@@ -812,7 +815,7 @@ async function addFiles(files) {
 }
 
 function isTextureFile(name) {
-  return /\.(dds|png|jpe?g|webp)$/i.test(name);
+  return TEXTURE_FILE_PATTERN.test(name);
 }
 
 function isReplacementModelFile(name) {
@@ -1425,6 +1428,12 @@ async function createMaterial(material, baseDir) {
 
 async function loadTexture(url, textureName) {
   if (textureName.toLowerCase().endsWith(".dds")) return loadDdsAsCanvasTexture(url, textureName);
+  if (textureName.toLowerCase().endsWith(".tga")) {
+    return tgaLoader.loadAsync(url).then((texture) => {
+      texture.flipY = false;
+      return texture;
+    });
+  }
   return textureLoader.loadAsync(url).then((texture) => {
     texture.flipY = false;
     return texture;
@@ -5228,7 +5237,8 @@ function updateBoundsFromRenderedMeshes() {
 
 function sampleVectorKey(keys, time) {
   if (!keys.length) return null;
-  if (keys.length === 1 || time <= keys[0].time) return keys[0].value;
+  if (time < keys[0].time) return null;
+  if (keys.length === 1 || time === keys[0].time) return keys[0].value;
   for (let i = 0; i < keys.length - 1; i++) {
     const a = keys[i];
     const b = keys[i + 1];
@@ -5242,7 +5252,8 @@ function sampleVectorKey(keys, time) {
 
 function sampleQuaternionKey(keys, time) {
   if (!keys.length) return null;
-  if (keys.length === 1 || time <= keys[0].time) return keys[0].value;
+  if (time < keys[0].time) return null;
+  if (keys.length === 1 || time === keys[0].time) return keys[0].value;
   for (let i = 0; i < keys.length - 1; i++) {
     const a = keys[i];
     const b = keys[i + 1];
@@ -5929,7 +5940,9 @@ function serializeMd9(model) {
 
 async function loadImageBitmapSource(source) {
   if (source instanceof File || source instanceof Blob) {
-    if (source.name?.toLowerCase().endsWith(".dds")) return decodeDdsToCanvas(await source.arrayBuffer());
+    const name = source.name?.toLowerCase() || "";
+    if (name.endsWith(".dds")) return decodeDdsToCanvas(await source.arrayBuffer());
+    if (name.endsWith(".tga")) return decodeTgaToCanvas(await source.arrayBuffer());
     return loadImageBitmap(source);
   }
   if (typeof ImageBitmap !== "undefined" && source instanceof ImageBitmap) return source;
@@ -5937,6 +5950,18 @@ async function loadImageBitmapSource(source) {
   if (typeof HTMLImageElement !== "undefined" && source instanceof HTMLImageElement) return source;
   if (typeof OffscreenCanvas !== "undefined" && source instanceof OffscreenCanvas) return source;
   throw new Error(t("cannotReadTexture"));
+}
+
+function decodeTgaToCanvas(buffer) {
+  const texture = tgaLoader.parse(buffer);
+  const image = texture.image;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
+  texture.dispose?.();
+  return canvas;
 }
 
 async function loadImageBitmap(file) {

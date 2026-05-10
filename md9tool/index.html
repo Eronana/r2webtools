@@ -26,7 +26,7 @@
               <button type="button" data-language="es">ES</button>
             </div>
           </div>
-          <div class="version-text">Build 2026.05.09.1247</div>
+          <div class="version-text">Build 2026.05.10.0217</div>
           <div class="contact-text">交流QQ群: 1094233945</div>
         </div>
         <div id="highlightInfo" class="highlight-info" hidden></div>
@@ -51,7 +51,7 @@
 
         <div class="panel-block">
           <label class="file-button">
-            <input id="fileInput" type="file" accept=".zip,.pak,.md9,.ani,.obj,.mtl,.glb,.gltf,.bin,.dds,.png,.jpg,.jpeg,.webp" multiple />
+            <input id="fileInput" type="file" accept=".zip,.pak,.md9,.ani,.obj,.mtl,.glb,.gltf,.bin,.dds,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga" multiple />
             <span data-i18n="openFiles">Open MD9 / ANI / model / textures</span>
           </label>
           <label class="file-button">
@@ -90,7 +90,7 @@
             </div>
           </div>
           <label class="file-button">
-            <input id="skinImportInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.dds" multiple />
+            <input id="skinImportInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga,.dds" multiple />
             <span data-i18n="importGltfButton">Import GLB / GLTF as MD9</span>
           </label>
         </div>
@@ -127,7 +127,7 @@
           <div class="texture-list-head">
             <div class="submesh-title" data-i18n="missingTextures">Missing textures</div>
             <label class="compact-file-button">
-              <input id="textureAddInput" type="file" accept=".dds,.png,.jpg,.jpeg,.webp" multiple />
+              <input id="textureAddInput" type="file" accept=".dds,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga" multiple />
               <span data-i18n="addTexture">Add</span>
             </label>
           </div>
@@ -172,7 +172,7 @@
           <div class="batch-actions">
             <button id="batchExportParts" type="button" disabled data-i18n="batchExport">Batch export</button>
             <label class="file-button compact-file-button">
-              <input id="batchReplaceInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.dds" multiple />
+              <input id="batchReplaceInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga,.dds" multiple />
               <span data-i18n="batchReplace">Batch replace</span>
             </label>
             <button id="batchEditToggle" type="button" disabled aria-pressed="false" data-i18n="batchEdit">Batch edit</button>
@@ -225,7 +225,7 @@
           <div id="transformEditor" class="transform-editor"></div>
 
           <label class="file-button">
-            <input id="replaceMeshInput" type="file" accept=".obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.dds" multiple />
+            <input id="replaceMeshInput" type="file" accept=".obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga,.dds" multiple />
             <span data-i18n="replaceModel">Replace OBJ / GLB / GLTF</span>
           </label>
           <label class="switch-row">
