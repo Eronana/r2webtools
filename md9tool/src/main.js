@@ -41,13 +41,22 @@ const el = {
   aniTimelineProgress: document.querySelector("#aniTimelineProgress"),
   aniTimelineCursor: document.querySelector("#aniTimelineCursor"),
   aniTimeSlider: document.querySelector("#aniTimeSlider"),
+  aniRangeBar: document.querySelector("#aniRangeBar"),
+  aniRangeFill: document.querySelector("#aniRangeFill"),
+  aniRangeStartHandle: document.querySelector("#aniRangeStartHandle"),
+  aniRangeEndHandle: document.querySelector("#aniRangeEndHandle"),
   aniKeyLayer: document.querySelector("#aniKeyLayer"),
   aniSnapKeys: document.querySelector("#aniSnapKeys"),
   aniSnapStep: document.querySelector("#aniSnapStep"),
   aniAddKey: document.querySelector("#aniAddKey"),
   aniKeyEditor: document.querySelector("#aniKeyEditor"),
+  aniKeyTransform: document.querySelector(".ani-key-transform"),
   aniKeyPartList: document.querySelector("#aniKeyPartList"),
   aniDeleteKey: document.querySelector("#aniDeleteKey"),
+  aniPrevKey: document.querySelector("#aniPrevKey"),
+  aniNextKey: document.querySelector("#aniNextKey"),
+  aniKeyInterval: document.querySelector("#aniKeyInterval"),
+  aniInsertKeyAfter: document.querySelector("#aniInsertKeyAfter"),
   aniCloseKeyEditor: document.querySelector("#aniCloseKeyEditor"),
   aniKeyTransformTitle: document.querySelector("#aniKeyTransformTitle"),
   aniKeyTimeInput: document.querySelector("#aniKeyTimeInput"),
@@ -169,6 +178,8 @@ const I18N = {
     defaultPose: "Default pose",
     autoPlay: "Auto play",
     snapKeys: "Snap",
+    rangeStart: "Start",
+    rangeEnd: "End",
     addKey: "Add key",
     time: "Time",
     keyParts: "Key parts",
@@ -185,6 +196,8 @@ const I18N = {
     filterParts: "Filter",
     missingTextures: "Texture list",
     addTexture: "Add",
+    add: "Add",
+    delete: "Delete",
     deleteTexture: "Delete",
     textureAdded: "Added {count} textures",
     textureDeleted: "Texture deleted",
@@ -308,6 +321,8 @@ const I18N = {
     defaultPose: "默认姿势",
     autoPlay: "自动播放",
     snapKeys: "吸附",
+    rangeStart: "起点",
+    rangeEnd: "终点",
     addKey: "添加关键帧",
     time: "时间",
     keyParts: "关键帧部件",
@@ -324,6 +339,8 @@ const I18N = {
     filterParts: "过滤",
     missingTextures: "贴图列表",
     addTexture: "添加",
+    add: "添加",
+    delete: "删除",
     deleteTexture: "删除",
     textureAdded: "已添加 {count} 个贴图",
     textureDeleted: "已删除贴图",
@@ -447,6 +464,8 @@ const I18N = {
     defaultPose: "Pose predeterminada",
     autoPlay: "Reproduccion automatica",
     snapKeys: "Ajustar",
+    rangeStart: "Inicio",
+    rangeEnd: "Fin",
     addKey: "Agregar key",
     time: "Tiempo",
     keyParts: "Partes key",
@@ -463,6 +482,8 @@ const I18N = {
     filterParts: "Filtrar",
     missingTextures: "Lista texturas",
     addTexture: "Agregar",
+    add: "Agregar",
+    delete: "Borrar",
     deleteTexture: "Borrar",
     textureAdded: "{count} texturas agregadas",
     textureDeleted: "Textura borrada",
@@ -620,10 +641,13 @@ const state = {
   currentAniId: "",
   animationStartTime: 0,
   animationFrame: 0,
+  aniRangeStart: 0,
+  aniRangeEnd: 0,
   selectedAniKeyTime: null,
   selectedAniPartName: "",
   draggingAniKeyTime: null,
   draggingAniEditor: false,
+  draggingAniRangeHandle: "",
   aniEditorDragOffset: { x: 0, y: 0 },
   batchTransformMatrix: new THREE.Matrix4(),
   batchSelectedParts: new Set(),
@@ -700,6 +724,9 @@ el.autoPlay.addEventListener("change", () => {
 });
 el.aniAddKey.addEventListener("click", addAniKeyAtCurrentTime);
 el.aniDeleteKey.addEventListener("click", deleteSelectedAniKey);
+el.aniPrevKey.addEventListener("click", () => selectAdjacentAniKey(-1));
+el.aniNextKey.addEventListener("click", () => selectAdjacentAniKey(1));
+el.aniInsertKeyAfter.addEventListener("click", insertAniKeyAfterSelected);
 el.aniCloseKeyEditor.addEventListener("click", clearSelectedAniKey);
 el.aniTransformEditor.addEventListener("input", handleAniTransformEditorInput);
 el.aniKeyTimeInput.addEventListener("change", applyAniKeyTimeInput);
@@ -713,6 +740,7 @@ el.aniTimeSlider.addEventListener("input", () => {
 });
 installAniTimelineHandlers();
 installAniKeyEditorDrag();
+installAniRangeBarHandlers();
 
 for (const input of [
   el.showTextures,
@@ -889,6 +917,8 @@ function resetOpenedFiles() {
   state.currentAnimation = null;
   state.currentAniId = "";
   state.animationFrame = 0;
+  state.aniRangeStart = 0;
+  state.aniRangeEnd = 0;
   state.selectedAniKeyTime = null;
   state.selectedAniPartName = "";
   state.missingTextures = new Set();
@@ -989,6 +1019,8 @@ async function loadSelectedAnimation(id) {
     state.currentAnimation = item.animation;
     state.animationStartTime = getNow();
     state.animationFrame = 0;
+    state.aniRangeStart = 0;
+    state.aniRangeEnd = item.animation.duration || 0;
     state.selectedAniKeyTime = null;
     state.selectedAniPartName = "";
     el.saveAnimation.disabled = false;
@@ -4878,6 +4910,8 @@ function clearAnimations() {
   state.currentAnimation = null;
   state.currentAniId = "";
   state.animationFrame = 0;
+  state.aniRangeStart = 0;
+  state.aniRangeEnd = 0;
   state.selectedAniKeyTime = null;
   state.selectedAniPartName = "";
   el.saveAnimation.disabled = true;
@@ -4897,15 +4931,19 @@ function updateStatsEmpty() {
 
 function updateFrameControls() {
   const duration = state.currentAnimation?.duration || 0;
+  ensureAniRange();
   const current = Math.min(state.animationFrame, duration);
-  const percent = duration > 0 ? current / duration * 100 : 0;
+  const range = getAniRange();
+  const percent = range.length > 0 ? (current - range.start) / range.length * 100 : 0;
   el.frameLabel.textContent = `${formatNumber(current)} / ${formatNumber(duration)}`;
   el.aniTimelinePanel.hidden = !state.currentAnimation;
   el.aniTimelinePanel.classList.toggle("disabled", !state.currentAnimation);
   el.aniAddKey.disabled = !state.currentAnimation;
   el.aniTimeSlider.disabled = !state.currentAnimation;
-  el.aniTimeSlider.max = String(Math.max(duration, 1));
+  el.aniTimeSlider.min = formatNumber(range.start);
+  el.aniTimeSlider.max = formatNumber(Math.max(range.end, range.start + 0.0001));
   el.aniTimeSlider.value = formatNumber(current);
+  updateAniRangeBar();
   updateAniSnapGrid();
   el.aniTimelineProgress.style.width = `${Math.max(0, Math.min(100, percent))}%`;
   el.aniTimelineCursor.style.left = `${Math.max(0, Math.min(100, percent))}%`;
@@ -4916,11 +4954,15 @@ function updateFrameControls() {
 
 function updateAniTimelinePlayback() {
   const duration = state.currentAnimation?.duration || 0;
+  ensureAniRange();
   const current = Math.min(state.animationFrame, duration);
-  const percent = duration > 0 ? current / duration * 100 : 0;
+  const range = getAniRange();
+  const percent = range.length > 0 ? (current - range.start) / range.length * 100 : 0;
   el.frameLabel.textContent = `${formatNumber(current)} / ${formatNumber(duration)}`;
-  el.aniTimeSlider.max = String(Math.max(duration, 1));
+  el.aniTimeSlider.min = formatNumber(range.start);
+  el.aniTimeSlider.max = formatNumber(Math.max(range.end, range.start + 0.0001));
   el.aniTimeSlider.value = formatNumber(current);
+  updateAniRangeBar();
   updateAniSnapGrid();
   el.aniTimelineProgress.style.width = `${Math.max(0, Math.min(100, percent))}%`;
   el.aniTimelineCursor.style.left = `${Math.max(0, Math.min(100, percent))}%`;
@@ -4929,14 +4971,106 @@ function updateAniTimelinePlayback() {
 }
 
 function updateAniSnapGrid() {
-  const duration = state.currentAnimation?.duration || 0;
-  if (!state.currentAnimation || !el.aniSnapKeys.checked || duration <= 0) {
+  const range = getAniRange();
+  if (!state.currentAnimation || !el.aniSnapKeys.checked || range.length <= 0) {
     el.aniTimeline.style.removeProperty("--snap-step");
     return;
   }
   const step = getAniSnapStep();
-  const percent = Math.max(0.2, Math.min(100, step / duration * 100));
+  const percent = Math.max(0.2, Math.min(100, step / range.length * 100));
   el.aniTimeline.style.setProperty("--snap-step", `${percent}%`);
+}
+
+function ensureAniRange() {
+  if (!state.currentAnimation) {
+    state.aniRangeStart = 0;
+    state.aniRangeEnd = 0;
+    return;
+  }
+  const duration = Math.max(state.currentAnimation.duration || 0, 0);
+  if (!Number.isFinite(state.aniRangeEnd) || state.aniRangeEnd <= state.aniRangeStart) state.aniRangeEnd = duration;
+  state.aniRangeStart = Math.max(0, Math.min(duration, state.aniRangeStart || 0));
+  state.aniRangeEnd = Math.max(state.aniRangeStart + 0.0001, Math.min(duration, state.aniRangeEnd || duration));
+}
+
+function getAniRange() {
+  ensureAniRange();
+  return {
+    start: state.aniRangeStart,
+    end: state.aniRangeEnd,
+    length: Math.max(0.0001, state.aniRangeEnd - state.aniRangeStart)
+  };
+}
+
+function updateAniRangeBar() {
+  const duration = Math.max(state.currentAnimation?.duration || 0, 0.0001);
+  const startPercent = Math.max(0, Math.min(100, state.aniRangeStart / duration * 100));
+  const endPercent = Math.max(0, Math.min(100, state.aniRangeEnd / duration * 100));
+  el.aniRangeStartHandle.style.left = `${startPercent}%`;
+  el.aniRangeEndHandle.style.left = `${endPercent}%`;
+  el.aniRangeFill.style.left = `${startPercent}%`;
+  el.aniRangeFill.style.width = `${Math.max(0, endPercent - startPercent)}%`;
+}
+
+function installAniRangeBarHandlers() {
+  el.aniRangeStartHandle.addEventListener("pointerdown", (event) => startAniRangeDrag(event, "start"));
+  el.aniRangeEndHandle.addEventListener("pointerdown", (event) => startAniRangeDrag(event, "end"));
+  el.aniRangeBar.addEventListener("pointerdown", (event) => {
+    if (event.target === el.aniRangeStartHandle || event.target === el.aniRangeEndHandle) return;
+    startAniRangeDrag(event, getNearestAniRangeHandle(event));
+  });
+  window.addEventListener("pointermove", (event) => {
+    if (!state.draggingAniRangeHandle || !state.currentAnimation) return;
+    setAniRangeHandleFromTime(state.draggingAniRangeHandle, rangeBarTimeFromEvent(event));
+  });
+  window.addEventListener("pointerup", () => {
+    stopAniRangeDrag();
+  });
+  window.addEventListener("pointercancel", () => {
+    stopAniRangeDrag();
+  });
+}
+
+function startAniRangeDrag(event, handle) {
+  if (!state.currentAnimation) return;
+  event.preventDefault();
+  event.stopPropagation();
+  state.draggingAniRangeHandle = handle;
+  el.aniRangeStartHandle.classList.toggle("active", handle === "start");
+  el.aniRangeEndHandle.classList.toggle("active", handle === "end");
+  setAniRangeHandleFromTime(handle, rangeBarTimeFromEvent(event));
+}
+
+function stopAniRangeDrag() {
+  state.draggingAniRangeHandle = "";
+  el.aniRangeStartHandle.classList.remove("active");
+  el.aniRangeEndHandle.classList.remove("active");
+}
+
+function getNearestAniRangeHandle(event) {
+  const time = rangeBarTimeFromEvent(event);
+  return Math.abs(time - state.aniRangeStart) <= Math.abs(time - state.aniRangeEnd) ? "start" : "end";
+}
+
+function setAniRangeHandleFromTime(handle, time) {
+  const duration = Math.max(state.currentAnimation?.duration || 0, 0);
+  if (handle === "start") {
+    state.aniRangeStart = Math.max(0, Math.min(time, state.aniRangeEnd - 0.0001));
+  } else {
+    state.aniRangeEnd = Math.min(duration, Math.max(time, state.aniRangeStart + 0.0001));
+  }
+  if (state.animationFrame < state.aniRangeStart || state.animationFrame > state.aniRangeEnd) {
+    el.autoPlay.checked = false;
+    applyAnimation(handle === "end" ? state.aniRangeEnd : state.aniRangeStart);
+  }
+  updateFrameControls();
+}
+
+function rangeBarTimeFromEvent(event) {
+  const duration = Math.max(state.currentAnimation?.duration || 0, 0);
+  const rect = el.aniRangeBar.getBoundingClientRect();
+  const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
+  return Number(Math.max(0, Math.min(duration, ratio * duration)).toFixed(6));
 }
 
 function saveCurrentAnimation() {
@@ -4979,7 +5113,6 @@ function installAniKeyEditorDrag() {
     };
     el.aniKeyEditor.style.left = `${editorRect.left - panelRect.left}px`;
     el.aniKeyEditor.style.top = `${editorRect.top - panelRect.top}px`;
-    el.aniKeyEditor.style.bottom = "auto";
     el.aniKeyEditor.setPointerCapture(event.pointerId);
   });
   el.aniKeyEditor.addEventListener("pointermove", (event) => {
@@ -4987,7 +5120,7 @@ function installAniKeyEditorDrag() {
     const panelRect = el.aniTimelinePanel.getBoundingClientRect();
     const x = event.clientX - panelRect.left - state.aniEditorDragOffset.x;
     const y = event.clientY - panelRect.top - state.aniEditorDragOffset.y;
-    el.aniKeyEditor.style.left = `${Math.max(0, x)}px`;
+    el.aniKeyEditor.style.left = `${x}px`;
     el.aniKeyEditor.style.top = `${y}px`;
   });
   const stopDrag = () => {
@@ -4998,10 +5131,10 @@ function installAniKeyEditorDrag() {
 }
 
 function timelineTimeFromEvent(event, snap) {
-  const duration = Math.max(state.currentAnimation?.duration || 0, 0);
+  const range = getAniRange();
   const rect = el.aniTimeline.getBoundingClientRect();
   const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
-  let time = Math.max(0, Math.min(duration, ratio * duration));
+  let time = Math.max(range.start, Math.min(range.end, range.start + ratio * range.length));
   if (snap && el.aniSnapKeys.checked) {
     const step = getAniSnapStep();
     time = Math.round(time / step) * step;
@@ -5016,14 +5149,15 @@ function getAniSnapStep() {
 function renderAniTimelineKeys() {
   el.aniKeyLayer.replaceChildren();
   if (!state.currentAnimation) return;
-  const duration = Math.max(state.currentAnimation.duration || 0, 0.0001);
+  const range = getAniRange();
   for (const time of getAniKeyTimes()) {
+    if (time < range.start || time > range.end) continue;
     const key = document.createElement("span");
     key.className = "ani-key";
     key.tabIndex = 0;
     key.setAttribute("role", "button");
     key.classList.toggle("active", isSameAniTime(time, state.selectedAniKeyTime));
-    key.style.left = `${Math.max(0, Math.min(100, time / duration * 100))}%`;
+    key.style.left = `${Math.max(0, Math.min(100, (time - range.start) / range.length * 100))}%`;
     key.title = formatNumber(time);
     key.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -5099,6 +5233,8 @@ function renderAniKeyEditor() {
   el.aniKeyTransformTitle.textContent = `${state.selectedAniPartName} @ ${formatNumber(state.selectedAniKeyTime)}`;
   el.aniKeyTimeInput.value = formatNumber(state.selectedAniKeyTime);
   buildAniTransformEditor(state.selectedAniPartName, state.selectedAniKeyTime);
+  positionAniKeyEditorInitial();
+  syncAniKeyPartListHeight();
 }
 
 function buildAniTransformEditor(partName, time) {
@@ -5131,6 +5267,29 @@ function buildAniTransformEditor(partName, time) {
     block.append(axes);
     el.aniTransformEditor.append(block);
   }
+}
+
+function syncAniKeyPartListHeight() {
+  requestAnimationFrame(() => {
+    if (el.aniKeyEditor.hidden) return;
+    const transformHeight = el.aniKeyTransform.getBoundingClientRect().height;
+    const partsRect = el.aniKeyPartList.getBoundingClientRect();
+    const editorRect = el.aniKeyEditor.getBoundingClientRect();
+    const available = Math.max(52, transformHeight - (partsRect.top - editorRect.top) + 10);
+    el.aniKeyPartList.style.setProperty("--ani-key-part-list-max-height", `${available}px`);
+  });
+}
+
+function positionAniKeyEditorInitial() {
+  if (el.aniKeyEditor.style.left || el.aniKeyEditor.style.top) return;
+  requestAnimationFrame(() => {
+    if (el.aniKeyEditor.hidden || el.aniKeyEditor.style.left || el.aniKeyEditor.style.top) return;
+    const panelRect = el.aniTimelinePanel.getBoundingClientRect();
+    const timelineRect = el.aniTimeline.getBoundingClientRect();
+    const editorRect = el.aniKeyEditor.getBoundingClientRect();
+    el.aniKeyEditor.style.left = `10px`;
+    el.aniKeyEditor.style.top = `${-editorRect.height - 10}px`;
+  });
 }
 
 function createAniTransformInput(type, control, transform) {
@@ -5205,6 +5364,28 @@ function applyAniKeyTimeInput() {
   }
   moveAniKeyTime(state.selectedAniKeyTime, nextTime);
   state.selectedAniKeyTime = nextTime;
+  el.autoPlay.checked = false;
+  applyAnimation(nextTime);
+  updateFrameControls();
+}
+
+function selectAdjacentAniKey(direction) {
+  if (!state.currentAnimation || state.selectedAniKeyTime == null) return;
+  const times = getAniKeyTimes();
+  if (!times.length) return;
+  const index = times.findIndex((time) => isSameAniTime(time, state.selectedAniKeyTime));
+  const nextIndex = Math.max(0, Math.min(times.length - 1, (index >= 0 ? index : 0) + direction));
+  selectAniKeyTime(times[nextIndex]);
+}
+
+function insertAniKeyAfterSelected() {
+  if (!state.currentAnimation || state.selectedAniKeyTime == null) return;
+  const duration = Math.max(state.currentAnimation.duration || 0, 0);
+  const interval = Math.max(0.0001, Number(el.aniKeyInterval.value) || 1);
+  const nextTime = Number(Math.min(duration, state.selectedAniKeyTime + interval).toFixed(6));
+  if (isSameAniTime(nextTime, state.selectedAniKeyTime)) return;
+  state.selectedAniKeyTime = nextTime;
+  state.selectedAniPartName = "";
   el.autoPlay.checked = false;
   applyAnimation(nextTime);
   updateFrameControls();
@@ -6597,8 +6778,8 @@ function animate() {
   const deltaSeconds = Math.min((now - state.lastFrameTime) / 1000, 0.1);
   state.lastFrameTime = now;
   if (state.currentAnimation && el.autoPlay.checked) {
-    const duration = Math.max(state.currentAnimation.duration || 0, 0.0001);
-    applyAnimation(((getNow() - state.animationStartTime) * ANIMATION_FPS) % duration);
+    const range = getAniRange();
+    applyAnimation(range.start + (((getNow() - state.animationStartTime) * ANIMATION_FPS) % range.length));
     updateFrameControls();
   }
   updateKeyboardCamera(deltaSeconds);

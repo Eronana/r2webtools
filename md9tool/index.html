@@ -27,7 +27,7 @@
               <button type="button" data-language="es">ES</button>
             </div>
           </div>
-          <div class="version-text">Build 2026.05.10.0436</div>
+          <div class="version-text">Build 2026.05.10.0903</div>
           <div class="contact-text">交流QQ群: 1094233945</div>
         </div>
         <div id="highlightInfo" class="highlight-info" hidden></div>
@@ -36,6 +36,11 @@
           <div class="ani-timeline-head">
             <label><input id="autoPlay" type="checkbox" checked /> <span data-i18n="autoPlay">Auto play</span></label>
             <span id="frameLabel">0 / 0</span>
+            <div id="aniRangeBar" class="ani-range-bar">
+              <span id="aniRangeFill" class="ani-range-fill"></span>
+              <button id="aniRangeStartHandle" class="ani-range-handle start" type="button" aria-label="Range start"></button>
+              <button id="aniRangeEndHandle" class="ani-range-handle end" type="button" aria-label="Range end"></button>
+            </div>
             <div class="ani-timeline-actions">
               <label class="switch-row"><input id="aniSnapKeys" type="checkbox" checked /> <span data-i18n="snapKeys">Snap</span></label>
               <input id="aniSnapStep" type="number" value="1.0" min="0.0001" step="0.01" />
@@ -51,7 +56,13 @@
           <div id="aniKeyEditor" class="ani-key-editor">
             <button id="aniCloseKeyEditor" class="icon-button ani-key-close" type="button" aria-label="Close">×</button>
             <div class="ani-key-parts">
-              <button id="aniDeleteKey" type="button" data-i18n="deleteKey">Delete key</button>
+              <div class="ani-key-nav">
+                <button id="aniPrevKey" type="button">&lt;</button>
+                <input id="aniKeyInterval" type="number" value="1" step="0.01" min="0.0001" />
+                <button id="aniInsertKeyAfter" type="button" data-i18n="add">Add</button>
+                <button id="aniNextKey" type="button">&gt;</button>
+              </div>
+              <button id="aniDeleteKey" class="ani-delete-key-row" type="button" data-i18n="delete">Delete</button>
               <div class="ani-editor-title" data-i18n="keyParts">Key parts</div>
               <div id="aniKeyPartList" class="ani-key-part-list"></div>
             </div>
