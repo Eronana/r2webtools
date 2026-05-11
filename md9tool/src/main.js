@@ -7960,8 +7960,9 @@ function restoreSaveMutationSnapshot(model, snapshot) {
   if (!model || !snapshot) return;
   for (const [index, uvs] of snapshot.uvs.entries()) {
     if (!model.submeshes[index]) continue;
+    if (floatArraysEqual(model.submeshes[index].uvs, uvs)) continue;
     model.submeshes[index].uvs = new Float32Array(uvs);
-    if (state.meshEntries[index]) updatePartGeometry(index);
+    updatePartUvAttribute(index);
   }
   for (const [index, metadata] of (snapshot.trackParts || []).entries()) {
     if (!model.submeshes[index]) continue;
@@ -7976,7 +7977,23 @@ function restoreSaveMutationSnapshot(model, snapshot) {
       model.materials[index].atlasBaked = materialSnapshot.atlasBaked;
     }
   }
-  updateModelDerivedData();
+  applyOptions();
+}
+
+function updatePartUvAttribute(index) {
+  const part = state.currentModel?.submeshes[index];
+  const geometry = state.meshEntries[index]?.mesh?.geometry;
+  if (!part || !geometry) return;
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(part.uvs, 2));
+  geometry.attributes.uv.needsUpdate = true;
+}
+
+function floatArraysEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 async function bakeReplacementAtlas(model, zipEntries = null) {
