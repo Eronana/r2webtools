@@ -2855,13 +2855,15 @@ async function batchExportSelectedPartsGlb() {
 async function exportPartsGlb(indices, filename, options = {}) {
   try {
     const group = options.group || await createGlbExportGroup(indices);
+    const animations = filterAnimationClipsForGroup(options.animations || [], group);
     const exporter = new GLTFExporter();
+    const exportOptions = {
+      binary: true,
+      embedImages: true
+    };
+    if (animations.length) exportOptions.animations = animations;
     const result = await new Promise((resolve, reject) => {
-      exporter.parse(group, resolve, reject, {
-        binary: true,
-        embedImages: true,
-        animations: options.animations || []
-      });
+      exporter.parse(group, resolve, reject, exportOptions);
     });
     const blob = result instanceof ArrayBuffer
       ? new Blob([result], { type: "model/gltf-binary" })
@@ -2916,12 +2918,31 @@ async function createLoadedAniClips() {
   for (const item of state.aniFiles) {
     try {
       if (!item.animation) item.animation = parseAni(await item.file.arrayBuffer(), item.label);
-      clips.push(createAnimationClipFromAni(item.animation));
+      const clip = createAnimationClipFromAni(item.animation);
+      if (clip?.tracks.length) clips.push(clip);
     } catch (error) {
       console.warn(`ANI export skipped: ${item.label}`, error);
     }
   }
   return clips;
+}
+
+function filterAnimationClipsForGroup(clips, group) {
+  if (!clips.length) return [];
+  const nodeNames = new Set();
+  group.traverse((object) => {
+    if (object.name) nodeNames.add(object.name);
+  });
+  const filtered = [];
+  for (const clip of clips) {
+    const tracks = clip.tracks.filter((track) => {
+      const target = parseGltfTrackName(track.name);
+      return target.nodeName && nodeNames.has(target.nodeName) && track.times.length > 0 && track.values.length > 0;
+    });
+    if (!tracks.length) continue;
+    filtered.push(new THREE.AnimationClip(clip.name || "animation", clip.duration, tracks));
+  }
+  return filtered;
 }
 
 function createAnimationClipFromAni(animation) {
