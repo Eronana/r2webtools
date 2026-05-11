@@ -111,6 +111,8 @@ const el = {
   trackBinInfo: document.querySelector("#trackBinInfo"),
   matrixModeControl: document.querySelector("#matrixModeControl"),
   matrixMode: document.querySelector("#matrixMode"),
+  keepMatrixControl: document.querySelector("#keepMatrixControl"),
+  keepMatrix: document.querySelector("#keepMatrix"),
   transformEditor: document.querySelector("#transformEditor"),
   replaceMeshInput: document.querySelector("#replaceMeshInput"),
   replaceKeepSize: document.querySelector("#replaceKeepSize"),
@@ -269,6 +271,7 @@ const I18N = {
     keepWorldPosition: "Keep position",
     transform: "Transform",
     matrixMode: "Matrix",
+    keepMatrix: "Keep matrix",
     trackBinDetails: "Section {section}, angle {angle} deg, index {index}",
     trackBinFlags: "Vertex start {vertexStart}",
     replaceModel: "Replace model",
@@ -419,6 +422,7 @@ const I18N = {
     keepWorldPosition: "保持位置",
     transform: "变换",
     matrixMode: "矩阵",
+    keepMatrix: "保持 matrix",
     trackBinDetails: "Section {section}，角度 {angle}°，Index {index}",
     trackBinFlags: "顶点起点 {vertexStart}",
     replaceModel: "替换模型",
@@ -569,6 +573,7 @@ const I18N = {
     keepWorldPosition: "Mantener pos.",
     transform: "Transformacion",
     matrixMode: "Matriz",
+    keepMatrix: "Mantener matriz",
     trackBinDetails: "Section {section}, angulo {angle} deg, index {index}",
     trackBinFlags: "Inicio vert. {vertexStart}",
     replaceModel: "Reemplazar modelo",
@@ -702,6 +707,8 @@ const state = {
   aniTimelineResizeStartHeight: 0,
   aniEditorDragOffset: { x: 0, y: 0 },
   batchTransformMatrix: new THREE.Matrix4(),
+  keepMatrixEditorMatrix: new THREE.Matrix4(),
+  keepMatrixEditorPartIndex: -1,
   batchSelectedParts: new Set(),
   undoStack: [],
   redoStack: [],
@@ -764,6 +771,11 @@ el.editMaterial.addEventListener("input", applyEditorValues);
 el.editParent.addEventListener("input", applyEditorValues);
 el.matrixMode.addEventListener("change", () => {
   if (!state.currentModel || state.editIndex < 0) return;
+  buildTransformEditor(state.currentModel.submeshes[state.editIndex]);
+});
+el.keepMatrix.addEventListener("change", () => {
+  if (!state.currentModel || state.editIndex < 0) return;
+  resetKeepMatrixEditor(state.editIndex);
   buildTransformEditor(state.currentModel.submeshes[state.editIndex]);
 });
 el.replaceMeshInput.addEventListener("change", async () => {
@@ -2158,22 +2170,46 @@ function fileKey(file) {
 
 function createSkeletonLines(model) {
   const positions = [];
+  const worldMatrices = computeModelPartWorldRenderMatrices(model);
+  const worldPosition = new THREE.Vector3();
+  const parentWorldPosition = new THREE.Vector3();
   for (const [index, part] of model.submeshes.entries()) {
     if (part.parentId < 0) continue;
     const parent = model.submeshes[part.parentId];
     if (!parent) continue;
+    parentWorldPosition.setFromMatrixPosition(worldMatrices[part.parentId] || new THREE.Matrix4());
+    worldPosition.setFromMatrixPosition(worldMatrices[index] || new THREE.Matrix4());
     positions.push(
-      parent.worldBonePosition.x,
-      parent.worldBonePosition.y,
-      parent.worldBonePosition.z,
-      model.submeshes[index].worldBonePosition.x,
-      model.submeshes[index].worldBonePosition.y,
-      model.submeshes[index].worldBonePosition.z
+      parentWorldPosition.x,
+      parentWorldPosition.y,
+      parentWorldPosition.z,
+      worldPosition.x,
+      worldPosition.y,
+      worldPosition.z
     );
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xffd36a, depthTest: false }));
+}
+
+function computeModelPartWorldRenderMatrices(model) {
+  const localMatrices = model.submeshes.map((part) => md9ArrayToRenderMatrix(part.matrix));
+  const worldMatrices = [];
+  const visiting = new Set();
+  const getWorld = (index) => {
+    if (worldMatrices[index]) return worldMatrices[index];
+    if (visiting.has(index)) return new THREE.Matrix4();
+    visiting.add(index);
+    const part = model.submeshes[index];
+    const parentWorld = part?.parentId >= 0 ? getWorld(part.parentId) : new THREE.Matrix4();
+    const world = new THREE.Matrix4().multiplyMatrices(parentWorld, localMatrices[index] || new THREE.Matrix4());
+    worldMatrices[index] = world;
+    visiting.delete(index);
+    return world;
+  };
+  for (let i = 0; i < model.submeshes.length; i++) getWorld(i);
+  return worldMatrices;
 }
 
 function createBoneNodes(model) {
@@ -2544,7 +2580,7 @@ function updateHighlightInfo() {
   const degree = getPartConnectionCount(state.highlightedPartIndex);
   const detailLine = isTrackBinModel()
     ? `Section: ${entry.part.trackSectionId ?? "-"} | Angle: ${formatNumber(THREE.MathUtils.radToDeg(entry.part.trackAngleRadians || 0))} | Index: ${entry.part.trackIndexId ?? "-"}`
-    : `ID: ${state.highlightedPartIndex} | ${t("connections")}: ${degree} | ${t("vertices")}: ${entry.part.vertexCount} | ${t("faces")}: ${entry.part.faceCount}`;
+    : `ID: ${state.highlightedPartIndex} | ${t("connections")}: ${degree}`;
   el.highlightInfo.hidden = false;
   el.highlightInfo.innerHTML = `
     <strong>${escapeHtml(entry.part.name)}</strong>
@@ -2643,7 +2679,11 @@ function openPartEditor(index) {
   populateEditorParentOptions(index);
   el.editParent.value = String(part.parentId);
   el.keepWorldOnParentChange.checked = true;
-  if (isTrackBinModel()) el.matrixMode.checked = false;
+  if (isTrackBinModel()) {
+    el.matrixMode.checked = false;
+    el.keepMatrix.checked = false;
+  }
+  resetKeepMatrixEditor(index);
 
   buildTransformEditor(part);
 }
@@ -2653,6 +2693,7 @@ function updateModelFormatUi(part = null) {
   el.editParentLabel.hidden = track;
   el.editParentControl.hidden = track;
   el.matrixModeControl.hidden = track;
+  el.keepMatrixControl.hidden = track;
   el.trackBinInfo.hidden = !track || !part;
   el.showSkeleton.disabled = track || !state.currentModel;
   if (track) {
@@ -3066,11 +3107,14 @@ async function createAlphaPngTexture(sourceTexture) {
 
 function buildTransformEditor(part) {
   el.transformEditor.replaceChildren();
+  const keepMatrix = canKeepMatrixEdit();
   if (el.matrixMode.checked) {
-    buildMatrixEditor(part);
+    buildMatrixEditor(keepMatrix ? getKeepMatrixEditorMatrix(part).toArray() : part.matrix);
     return;
   }
-  const transform = getEditorTransform(part);
+  const transform = keepMatrix
+    ? decomposeRenderMatrix(getKeepMatrixEditorMatrix(part))
+    : getEditorTransform(part);
   for (const control of TRANSFORM_CONTROLS) {
     const row = document.createElement("div");
     row.className = "transform-row";
@@ -3139,7 +3183,7 @@ function setBatchTransformInputsToIdentity() {
   }
 }
 
-function buildMatrixEditor(part) {
+function buildMatrixEditor(matrixArray) {
   const grid = document.createElement("div");
   grid.className = "matrix-editor";
   for (let row = 0; row < 4; row++) {
@@ -3148,7 +3192,7 @@ function buildMatrixEditor(part) {
       const input = document.createElement("input");
       input.type = "number";
       input.step = "0.0001";
-      input.value = formatNumber(part.matrix[index] ?? (row === col ? 1 : 0));
+      input.value = formatNumber(matrixArray?.[index] ?? (row === col ? 1 : 0));
       input.dataset.matrixIndex = String(index);
       input.setAttribute("aria-label", `m${row}${col}`);
       input.addEventListener("input", applyEditorValues);
@@ -3156,6 +3200,21 @@ function buildMatrixEditor(part) {
     }
   }
   el.transformEditor.append(grid);
+}
+
+function canKeepMatrixEdit() {
+  return Boolean(el.keepMatrix?.checked && state.currentModel && !isTrackBinModel());
+}
+
+function resetKeepMatrixEditor(partIndex = state.editIndex) {
+  state.keepMatrixEditorMatrix.identity();
+  state.keepMatrixEditorPartIndex = partIndex;
+}
+
+function getKeepMatrixEditorMatrix(part) {
+  const index = state.currentModel?.submeshes.indexOf(part) ?? state.editIndex;
+  if (state.keepMatrixEditorPartIndex !== index) resetKeepMatrixEditor(index);
+  return state.keepMatrixEditorMatrix.clone();
 }
 
 function getEditorTransform(part) {
@@ -3243,6 +3302,9 @@ function applyEditorValues() {
     applyTrackTransformInputs(part);
     syncTrackPartNode(part);
     syncTrackPartMeshTransform(state.editIndex);
+  } else if (canKeepMatrixEdit()) {
+    applyKeepMatrixEditorDelta(part, state.editIndex);
+    syncPartBone(part);
   } else {
     part.matrix = el.matrixMode.checked ? matrixInputsToMd9Matrix() : transformInputsToMd9Matrix();
     syncPartBone(part);
@@ -3427,6 +3489,10 @@ function batchInputsToRenderMatrix() {
 }
 
 function transformInputsToMd9Matrix() {
+  return renderMatrixToMd9Array(transformInputsToRenderMatrix());
+}
+
+function transformInputsToRenderMatrix() {
   const position = new THREE.Vector3();
   const rotation = new THREE.Euler();
   const scale = new THREE.Vector3(1, 1, 1);
@@ -3437,8 +3503,7 @@ function transformInputsToMd9Matrix() {
     if (input.dataset.transform === "rotation") rotation[axis] = THREE.MathUtils.degToRad(value);
     if (input.dataset.transform === "scale") scale[axis] = value || 1;
   }
-  const renderMatrix = new THREE.Matrix4().compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
-  return renderMatrixToMd9Array(renderMatrix);
+  return new THREE.Matrix4().compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
 }
 
 function trackTransformInputsToMatrix() {
@@ -3460,6 +3525,64 @@ function applyTrackTransformInputs(part) {
   part.matrix = editorMatrix.toArray();
 }
 
+function applyKeepMatrixEditorDelta(part, index) {
+  if (!part) return;
+  if (state.keepMatrixEditorPartIndex !== index) resetKeepMatrixEditor(index);
+  const nextEditorMatrix = el.matrixMode.checked ? matrixInputsToRenderMatrix() : transformInputsToRenderMatrix();
+  const previousInverse = state.keepMatrixEditorMatrix.clone().invert();
+  const delta = new THREE.Matrix4().multiplyMatrices(nextEditorMatrix, previousInverse);
+  if (!isApproximatelyIdentityMatrix(delta)) {
+    bakePartLocalTransform(part, delta);
+    updatePartGeometryAttributes(index);
+  }
+  state.keepMatrixEditorMatrix.copy(nextEditorMatrix);
+}
+
+function bakePartLocalTransform(part, transform) {
+  const point = new THREE.Vector3();
+  for (let i = 0; i < part.localPositions.length; i += 3) {
+    point
+      .set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2])
+      .applyMatrix4(transform);
+    part.localPositions[i] = point.x;
+    part.localPositions[i + 1] = point.y;
+    part.localPositions[i + 2] = point.z;
+  }
+
+  const normalMatrix = new THREE.Matrix3().getNormalMatrix(transform);
+  const normal = new THREE.Vector3();
+  for (let i = 0; i < part.normals.length; i += 3) {
+    normal
+      .set(part.normals[i], part.normals[i + 1], part.normals[i + 2])
+      .applyMatrix3(normalMatrix)
+      .normalize();
+    part.normals[i] = normal.x;
+    part.normals[i + 1] = normal.y;
+    part.normals[i + 2] = normal.z;
+  }
+}
+
+function isApproximatelyIdentityMatrix(matrix, epsilon = 1e-10) {
+  const identity = createIdentityMatrixArray();
+  const elements = matrix.elements;
+  for (let i = 0; i < 16; i++) {
+    if (Math.abs(elements[i] - identity[i]) > epsilon) return false;
+  }
+  return true;
+}
+
+function updatePartGeometryAttributes(index) {
+  const entry = state.meshEntries[index];
+  const part = state.currentModel?.submeshes[index];
+  const geometry = entry?.mesh?.geometry;
+  if (!part || !geometry) return;
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(part.localPositions, 3));
+  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(part.normals, 3));
+  geometry.computeBoundingSphere();
+  if (el.showNormals.checked) rebuildNormalVisualizers();
+  if (index === state.highlightedPartIndex) refreshHighlightedMaterial();
+}
+
 function getTrackPartWorldTransform(part, editorMatrix = null) {
   const frame = getTrackPartFrameMatrix(part);
   const inverseFrame = frame.clone().invert();
@@ -3478,7 +3601,11 @@ function syncTrackPartMeshTransform(index) {
 }
 
 function matrixInputsToMd9Matrix() {
-  const matrix = new Array(16).fill(0);
+  return matrixInputsToRenderMatrix().toArray();
+}
+
+function matrixInputsToRenderMatrix() {
+  const matrix = createIdentityMatrixArray();
   matrix[0] = 1;
   matrix[5] = 1;
   matrix[10] = 1;
@@ -3486,7 +3613,7 @@ function matrixInputsToMd9Matrix() {
   for (const input of el.transformEditor.querySelectorAll("[data-matrix-index]")) {
     matrix[Number(input.dataset.matrixIndex)] = Number(input.value) || 0;
   }
-  return matrix;
+  return new THREE.Matrix4().fromArray(matrix);
 }
 
 function findRenderedMaterial(materialId, excludeIndex = -1) {
@@ -4193,32 +4320,22 @@ async function parseObjReplacement(text, mtlText, files) {
   }
 
   const root = objLoader.parse(text);
-  const positions = [];
-  const normals = [];
-  const uvs = [];
+  const builder = createIndexedGeometryBuilder();
   const zeroUv = new THREE.Vector2();
   root.updateMatrixWorld(true);
   root.traverse((object) => {
     if (!object.isMesh || !object.geometry) return;
-    const geometry = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone();
+    const geometry = object.geometry.getAttribute("normal") ? object.geometry : object.geometry.clone();
     if (!geometry.getAttribute("normal")) geometry.computeVertexNormals();
-    const position = geometry.getAttribute("position");
-    const normal = geometry.getAttribute("normal");
-    const uv = geometry.getAttribute("uv");
-    for (let i = 0; i < position.count; i++) {
-      positions.push(position.getX(i), position.getY(i), position.getZ(i));
-      normals.push(normal.getX(i), normal.getY(i), normal.getZ(i));
-      uvs.push(uv ? uv.getX(i) : zeroUv.x, uv ? uv.getY(i) : zeroUv.y);
-    }
-    geometry.dispose();
+    appendIndexedMeshGeometry(object, geometry, builder, null, null, files, zeroUv);
+    if (geometry !== object.geometry) geometry.dispose();
   });
-  const indices = new Uint16Array(positions.length / 3);
-  for (let i = 0; i < indices.length; i++) indices[i] = i;
+  const replacementGeometry = finalizeIndexedGeometryBuilder(builder);
   return {
-    positions: new Float32Array(positions),
-    normals: new Float32Array(normals),
-    uvs: new Float32Array(uvs),
-    indices,
+    positions: replacementGeometry.positions,
+    normals: replacementGeometry.normals,
+    uvs: replacementGeometry.uvs,
+    indices: replacementGeometry.indices,
     material: firstMaterial,
     textureFile
   };
@@ -4230,15 +4347,12 @@ async function parseGltfReplacement(buffer, files) {
   const gltf = await new Promise((resolve, reject) => {
     loader.parse(buffer, "", resolve, reject);
   });
-  const positions = [];
-  const normals = [];
-  const uvs = [];
+  const builder = createIndexedGeometryBuilder();
   const zeroUv = new THREE.Vector2();
   let firstMaterial = null;
   let textureImage = null;
   let textureFile = null;
   const textureSources = [];
-  const uvSourceIds = [];
   gltf.scene.updateMatrixWorld(true);
   gltf.scene.traverse((object) => {
     if (!object.isMesh || !object.geometry) return;
@@ -4248,20 +4362,19 @@ async function parseGltfReplacement(buffer, files) {
       textureImage = firstMaterial?.map?.image || null;
       textureFile = findTextureFileForMaterial(firstMaterial, files);
     }
-    appendGltfMesh(object, files, positions, normals, uvs, uvSourceIds, textureSources, zeroUv);
+    appendGltfMesh(object, files, builder, textureSources, zeroUv);
   });
-  const indices = new Uint16Array(positions.length / 3);
-  for (let i = 0; i < indices.length; i++) indices[i] = i;
+  const replacementGeometry = finalizeIndexedGeometryBuilder(builder);
   return {
-    positions: new Float32Array(positions),
-    normals: new Float32Array(normals),
-    uvs: new Float32Array(uvs),
-    indices,
+    positions: replacementGeometry.positions,
+    normals: replacementGeometry.normals,
+    uvs: replacementGeometry.uvs,
+    indices: replacementGeometry.indices,
     material: firstMaterial,
     textureFile,
     textureImage,
     textureSources,
-    uvSourceIds
+    uvSourceIds: replacementGeometry.uvSourceIds
   };
 }
 
@@ -4325,6 +4438,7 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
     previewTexture.wrapT = THREE.ClampToEdgeWrapping;
     previewTexture.userData.hasAlpha = atlas.hasAlpha;
   }
+  for (const bucket of activeBuckets) compactPartBucketVertices(bucket);
 
   const materials = [material];
   const submeshes = bones.map((bone, index) => createMd9PartFromBone(bone, index, pruned.parentIds[index], bones, activeBuckets[index]));
@@ -4575,6 +4689,44 @@ function getBucketTriangleComponents(bucket) {
 function positionKey(positions, vertexIndex) {
   const scale = 100000;
   return `${Math.round(positions[vertexIndex * 3] * scale)}:${Math.round(positions[vertexIndex * 3 + 1] * scale)}:${Math.round(positions[vertexIndex * 3 + 2] * scale)}`;
+}
+
+function compactPartBucketVertices(bucket) {
+  if (!bucket?.positions?.length || !bucket?.indices?.length) return;
+  const vertexMap = new Map();
+  const oldToNew = new Map();
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indices = [];
+  const getNewIndex = (oldVertex) => {
+    const key = [
+      quantizeVertexValue(bucket.positions[oldVertex * 3]),
+      quantizeVertexValue(bucket.positions[oldVertex * 3 + 1]),
+      quantizeVertexValue(bucket.positions[oldVertex * 3 + 2]),
+      quantizeVertexValue(bucket.normals[oldVertex * 3]),
+      quantizeVertexValue(bucket.normals[oldVertex * 3 + 1]),
+      quantizeVertexValue(bucket.normals[oldVertex * 3 + 2]),
+      quantizeVertexValue(bucket.uvs[oldVertex * 2]),
+      quantizeVertexValue(bucket.uvs[oldVertex * 2 + 1])
+    ].join("|");
+    const existing = vertexMap.get(key);
+    if (existing !== undefined) return existing;
+    const next = positions.length / 3;
+    vertexMap.set(key, next);
+    positions.push(bucket.positions[oldVertex * 3], bucket.positions[oldVertex * 3 + 1], bucket.positions[oldVertex * 3 + 2]);
+    normals.push(bucket.normals[oldVertex * 3], bucket.normals[oldVertex * 3 + 1], bucket.normals[oldVertex * 3 + 2]);
+    uvs.push(bucket.uvs[oldVertex * 2], bucket.uvs[oldVertex * 2 + 1]);
+    return next;
+  };
+  for (const oldVertex of bucket.indices) {
+    if (!oldToNew.has(oldVertex)) oldToNew.set(oldVertex, getNewIndex(oldVertex));
+    indices.push(oldToNew.get(oldVertex));
+  }
+  bucket.positions = positions;
+  bucket.normals = normals;
+  bucket.uvs = uvs;
+  bucket.indices = indices;
 }
 
 function rebuildBucketTriangles(bucket, keepTriangles, vertexRefSources, partIndex) {
@@ -5081,29 +5233,87 @@ function parseGltfTrackName(name) {
   }
 }
 
-function appendGltfMesh(object, files, positions, normals, uvs, uvSourceIds, textureSources, zeroUv) {
+function appendGltfMesh(object, files, builder, textureSources, zeroUv) {
   const geometry = object.geometry.getAttribute("normal") ? object.geometry : object.geometry.clone();
   if (!geometry.getAttribute("normal")) geometry.computeVertexNormals();
+  appendIndexedMeshGeometry(object, geometry, builder, object.material, textureSources, files, zeroUv);
+  if (geometry !== object.geometry) geometry.dispose();
+}
+
+function createIndexedGeometryBuilder() {
+  return {
+    positions: [],
+    normals: [],
+    uvs: [],
+    indices: [],
+    uvSourceIds: [],
+    vertexMap: new Map()
+  };
+}
+
+function finalizeIndexedGeometryBuilder(builder) {
+  if (builder.positions.length / 3 > 65535) throw new Error(t("replacementTooLarge"));
+  return {
+    positions: new Float32Array(builder.positions),
+    normals: new Float32Array(builder.normals),
+    uvs: new Float32Array(builder.uvs),
+    indices: new Uint16Array(builder.indices),
+    uvSourceIds: builder.uvSourceIds
+  };
+}
+
+function appendIndexedMeshGeometry(object, geometry, builder, material, textureSources, files, zeroUv) {
   const position = geometry.getAttribute("position");
   const normal = geometry.getAttribute("normal");
   const uv = geometry.getAttribute("uv");
+  if (!position || !normal) return;
   const index = geometry.getIndex();
   const drawCount = index ? index.count : position.count;
-  const materialForDraw = buildMaterialDrawLookup(geometry, object.material);
+  const materialForDraw = textureSources ? buildMaterialDrawLookup(geometry, material ?? object.material) : () => null;
   const vertex = new THREE.Vector3();
   const vertexNormal = new THREE.Vector3();
 
   for (let drawIndex = 0; drawIndex < drawCount; drawIndex++) {
     const vertexIndex = index ? index.getX(drawIndex) : drawIndex;
+    const sourceId = textureSources ? registerTextureSource(textureSources, materialForDraw(drawIndex), files) : -1;
     getGltfWorldVertex(object, geometry, position, vertexIndex, vertex);
     getGltfWorldNormal(object, geometry, normal, vertexIndex, vertexNormal);
-    positions.push(vertex.x, vertex.y, vertex.z);
-    normals.push(vertexNormal.x, vertexNormal.y, vertexNormal.z);
-    uvs.push(uv ? uv.getX(vertexIndex) : zeroUv.x, uv ? uv.getY(vertexIndex) : zeroUv.y);
-    uvSourceIds.push(registerTextureSource(textureSources, materialForDraw(drawIndex), files));
+    builder.indices.push(addIndexedReplacementVertex(
+      builder,
+      vertex,
+      vertexNormal,
+      uv ? uv.getX(vertexIndex) : zeroUv.x,
+      uv ? uv.getY(vertexIndex) : zeroUv.y,
+      sourceId
+    ));
   }
+}
 
-  if (geometry !== object.geometry) geometry.dispose();
+function addIndexedReplacementVertex(builder, position, normal, u, v, sourceId) {
+  const key = [
+    quantizeVertexValue(position.x),
+    quantizeVertexValue(position.y),
+    quantizeVertexValue(position.z),
+    quantizeVertexValue(normal.x),
+    quantizeVertexValue(normal.y),
+    quantizeVertexValue(normal.z),
+    quantizeVertexValue(u),
+    quantizeVertexValue(v),
+    sourceId
+  ].join("|");
+  const existing = builder.vertexMap.get(key);
+  if (existing !== undefined) return existing;
+  const index = builder.positions.length / 3;
+  builder.vertexMap.set(key, index);
+  builder.positions.push(position.x, position.y, position.z);
+  builder.normals.push(normal.x, normal.y, normal.z);
+  builder.uvs.push(u, v);
+  builder.uvSourceIds.push(sourceId);
+  return index;
+}
+
+function quantizeVertexValue(value) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 1000000);
 }
 
 function buildMaterialDrawLookup(geometry, material) {
@@ -7415,7 +7625,7 @@ async function saveCurrentModel() {
     await bakeReplacementAtlas(state.currentModel, zipEntries);
     const modelBytes = isTrackBin
       ? serializeTrackBin(createBakedTrackModelForSave(state.currentModel))
-      : serializeMd9(createBakedModelForSave(state.currentModel));
+      : serializeMd9(createMd9ModelForSave(state.currentModel));
     for (const animation of isTrackBin ? [] : (state.currentModel.generatedAnimations || [])) {
       zipEntries.push({ name: sanitizeFilename(animation.name || "animation.ani"), data: new Blob([serializeAni(animation)], { type: "application/octet-stream" }) });
     }
@@ -7446,8 +7656,7 @@ function normalizeModelBaseName(name) {
   return sanitizeFilename(String(name || "model").replace(/\.(md9|bin)$/i, "").trim() || "model");
 }
 
-function createBakedModelForSave(model) {
-  const context = createBakeHierarchyContext(model);
+function createMd9ModelForSave(model) {
   return {
     ...model,
     materials: model.materials.map((material) => ({
@@ -7458,7 +7667,19 @@ function createBakedModelForSave(model) {
       emissive: [...material.emissive],
       extra: material.extra ? [...material.extra] : []
     })),
-    submeshes: model.submeshes.map((part, index) => createBakedPartForSave(part, index, context))
+    submeshes: model.submeshes.map(createMd9PartForSave)
+  };
+}
+
+function createMd9PartForSave(part) {
+  return {
+    ...part,
+    matrix: part.matrix ? [...part.matrix] : createIdentityMatrixArray(),
+    boundingBox: [...part.boundingBox],
+    localPositions: new Float32Array(part.localPositions),
+    normals: new Float32Array(part.normals),
+    uvs: new Float32Array(part.uvs),
+    indices: new Uint16Array(part.indices)
   };
 }
 
@@ -7564,11 +7785,12 @@ function getSaveDependencyEntries(model, existingEntries) {
   const entries = [];
   for (const material of model.materials) {
     if (!material.textureName) continue;
-    const key = textureKey(material.textureName);
+    const match = findCompatibleTexture(material.textureName, model.baseDir || "");
+    if (!match?.fileOrUrl || !(match.fileOrUrl instanceof File)) continue;
+    const entryName = match.name || material.textureName;
+    const key = textureKey(entryName);
     if (existing.has(key)) continue;
-    const file = state.textureFiles.get(key);
-    if (!file) continue;
-    entries.push({ name: material.textureName, data: file });
+    entries.push({ name: entryName, data: match.fileOrUrl });
     existing.add(key);
   }
   return entries;
