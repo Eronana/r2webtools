@@ -668,10 +668,6 @@ const state = {
   cameraDragStart: new THREE.Vector2(),
   cameraPointerLocked: false,
   cameraPointerMoved: false,
-  cameraOrbitYaw: 0,
-  cameraOrbitPitch: 0,
-  cameraOrbitDistance: 1,
-  cameraOrbitInitialized: false,
   lastFrameTime: performance.now(),
   textureFiles: new Map(),
   objectUrls: [],
@@ -6667,18 +6663,13 @@ function installViewportPicking() {
       state.cameraDragPointerId = event.pointerId;
       state.cameraDragStart.set(event.clientX, event.clientY);
       state.cameraPointerMoved = false;
-      syncCameraOrbitState();
-      requestCameraPointerLock();
     }
   });
   renderer.domElement.addEventListener("pointermove", (event) => {
     if (state.cameraPointerLocked || state.cameraDragPointerId !== event.pointerId || event.buttons !== 1) return;
-    const movementX = event.movementX || event.clientX - state.cameraDragStart.x;
-    const movementY = event.movementY || event.clientY - state.cameraDragStart.y;
-    if (Math.hypot(movementX, movementY) <= 0) return;
+    if (state.cameraDragStart.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) <= PART_PICK_DRAG_THRESHOLD) return;
     state.cameraPointerMoved = true;
-    rotateCameraByPointerMovement(movementX, movementY);
-    state.cameraDragStart.set(event.clientX, event.clientY);
+    requestCameraPointerLock();
   });
   renderer.domElement.addEventListener("pointerup", (event) => {
     state.cameraDragPointerId = null;
@@ -6717,31 +6708,17 @@ function handleCameraPointerLockMove(event) {
 }
 
 function rotateCameraByPointerMovement(movementX, movementY) {
-  state.cameraOrbitYaw -= movementX * POINTER_LOCK_ROTATE_SPEED;
-  state.cameraOrbitPitch -= movementY * POINTER_LOCK_ROTATE_SPEED;
-  const transform = cameraOrbitTransformFromState();
-  camera.position.copy(controls.target).add(transform.offset);
-  camera.up.copy(transform.up);
-  camera.lookAt(controls.target);
-}
-
-function syncCameraOrbitState(force = false) {
   const offset = camera.position.clone().sub(controls.target);
-  state.cameraOrbitDistance = Math.max(offset.length(), 0.0001);
-  if (state.cameraOrbitInitialized && !force) return;
-  const horizontal = Math.hypot(offset.x, offset.z);
-  state.cameraOrbitYaw = Math.atan2(offset.x, offset.z);
-  state.cameraOrbitPitch = Math.atan2(offset.y, horizontal);
-  state.cameraOrbitInitialized = true;
-}
-
-function cameraOrbitTransformFromState() {
-  const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), state.cameraOrbitYaw);
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(yaw).normalize();
-  const pitch = new THREE.Quaternion().setFromAxisAngle(right, state.cameraOrbitPitch);
-  const offset = new THREE.Vector3(0, 0, state.cameraOrbitDistance).applyQuaternion(yaw).applyQuaternion(pitch);
-  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(yaw).applyQuaternion(pitch).normalize();
-  return { offset, up };
+  const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -movementX * POINTER_LOCK_ROTATE_SPEED);
+  const up = camera.up.clone().applyQuaternion(yaw).normalize();
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).applyQuaternion(yaw).normalize();
+  offset.applyQuaternion(yaw);
+  const pitch = new THREE.Quaternion().setFromAxisAngle(right, -movementY * POINTER_LOCK_ROTATE_SPEED);
+  offset.applyQuaternion(pitch);
+  up.applyQuaternion(pitch).normalize();
+  camera.position.copy(controls.target).add(offset);
+  camera.up.copy(up);
+  camera.lookAt(controls.target);
 }
 
 function pickPartFromViewport(event) {
@@ -7014,7 +6991,6 @@ function frameModel(bounds) {
   camera.up.set(0, 1, 0);
   camera.updateProjectionMatrix();
   controls.update();
-  syncCameraOrbitState(true);
 }
 
 async function saveCurrentModel() {
