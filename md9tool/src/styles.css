@@ -249,6 +249,11 @@ button,
   cursor: pointer;
 }
 
+button:hover:not(:disabled),
+.file-button:hover {
+  cursor: pointer;
+}
+
 button {
   background: var(--accent);
   color: #07110f;
@@ -510,30 +515,19 @@ input[type="checkbox"] {
   top: -6px;
   left: 0;
   right: 0;
-  height: 10px;
+  height: 6px;
+  background: transparent;
   cursor: ns-resize;
   touch-action: none;
 }
 
-.ani-timeline-resize-handle::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 3px;
-  width: 72px;
-  height: 3px;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 28%);
-  transform: translateX(-50%);
+.ani-timeline-resize-handle:hover,
+.ani-timeline-resize-handle.dragging {
+  background: rgb(84 198 166 / 32%);
 }
 
-.ani-timeline-resize-handle:hover::before,
-.ani-timeline-resize-handle.dragging::before {
-  background: var(--accent);
-}
-
-.ani-timeline-resize-handle.disabled::before {
-  background: rgb(255 255 255 / 16%);
+.ani-timeline-resize-handle.disabled:hover {
+  background: transparent;
 }
 
 .ani-timeline-panel.disabled {
@@ -584,7 +578,12 @@ input[type="checkbox"] {
   bottom: 0;
   border-radius: 4px;
   background: rgb(84 198 166 / 22%);
-  pointer-events: none;
+  cursor: grab;
+  touch-action: none;
+}
+
+.ani-range-fill.dragging {
+  cursor: grabbing;
 }
 
 .ani-range-handle {
@@ -715,22 +714,11 @@ input[type="checkbox"] {
   overflow: auto;
 }
 
-.ani-snap-layer {
+.ani-timeline-canvas {
   position: absolute;
   top: 0;
-  bottom: 0;
   left: var(--ani-track-label-width);
-  right: 0;
   pointer-events: none;
-}
-
-.ani-snap-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgb(255 255 255 / 7%);
-  transform: translateX(-0.5px);
 }
 
 .ani-timeline-progress {
@@ -813,60 +801,9 @@ input[type="checkbox"] {
 .ani-track-keys {
   position: relative;
   min-height: var(--ani-track-row-height);
+  cursor: default;
 }
 
-.ani-key {
-  position: absolute;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  min-height: 0;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  transform: translate(-50%, -50%);
-  cursor: pointer;
-}
-
-.ani-key::before,
-.ani-key::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.ani-key::before {
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border: 1px solid rgb(255 255 255 / 70%);
-  border-radius: 1px;
-  background: var(--warn);
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.ani-key::after {
-  top: -10px;
-  width: 1px;
-  height: 28px;
-  background: rgb(255 255 255 / 38%);
-  z-index: -1;
-}
-
-.ani-key.active {
-  background: transparent;
-}
-
-.ani-key.active::before {
-  background: #ff6aa8;
-  border-color: #fff;
-}
-
-.ani-key.active {
-  cursor: grab;
-}
 
 .ani-key-editor {
   position: absolute;

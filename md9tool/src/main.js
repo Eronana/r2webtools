@@ -39,7 +39,7 @@ const el = {
   aniTimelinePanel: document.querySelector("#aniTimelinePanel"),
   aniTimelineResizeHandle: document.querySelector("#aniTimelineResizeHandle"),
   aniTimeline: document.querySelector("#aniTimeline"),
-  aniSnapLayer: document.querySelector("#aniSnapLayer"),
+  aniTimelineCanvas: document.querySelector("#aniTimelineCanvas"),
   aniTimelineProgress: document.querySelector("#aniTimelineProgress"),
   aniTimelineCursor: document.querySelector("#aniTimelineCursor"),
   aniSliderTrack: document.querySelector("#aniSliderTrack"),
@@ -690,8 +690,12 @@ const state = {
   draggingAniPartName: "",
   visibleAniTracks: null,
   aniTrackSelectionTouched: false,
+  aniTimelineKeyHits: [],
   draggingAniEditor: false,
   draggingAniRangeHandle: "",
+  draggingAniRangeMove: false,
+  aniRangeMoveStartTime: 0,
+  aniRangeMoveStartRange: { start: 0, end: 0 },
   draggingAniTimelineHeight: false,
   draggingAniSlider: false,
   aniTimelineResizeStartY: 0,
@@ -781,6 +785,11 @@ el.aniTransformEditor.addEventListener("input", handleAniTransformEditorInput);
 el.aniKeyTimeInput.addEventListener("change", applyAniKeyTimeInput);
 el.aniSnapKeys.addEventListener("input", updateAniSnapGrid);
 el.aniSnapStep.addEventListener("input", updateAniSnapGrid);
+el.aniTimeline.addEventListener("scroll", drawAniTimelineCanvas);
+el.aniTimeline.addEventListener("pointermove", updateAniTimelineHoverCursor);
+el.aniTimeline.addEventListener("pointerleave", () => {
+  el.aniTimeline.style.cursor = "";
+});
 el.aniTimeSlider.addEventListener("input", () => {
   if (!state.currentAnimation) return;
   el.autoPlay.checked = false;
@@ -5862,35 +5871,28 @@ function updateAniTimelinePlayback() {
   el.aniTimeSlider.value = formatNumber(current);
   updateAniSliderVisual(current);
   updateAniRangeBar();
-  updateAniSnapGrid();
-  updateAniTimelineCursor(percent);
+  updateAniTimelineCursor(percent, false);
   updateStatusPosition();
 }
 
 function updateAniSnapGrid() {
   const range = getAniRange();
-  el.aniSnapLayer.replaceChildren();
   if (!state.currentAnimation || !el.aniSnapKeys.checked || range.length <= 0) {
     el.aniTimeline.style.removeProperty("--snap-step");
+    drawAniTimelineCanvas();
     return;
   }
   const step = getAniSnapStep();
   const percent = Math.max(0.2, Math.min(100, step / range.length * 100));
   el.aniTimeline.style.setProperty("--snap-step", `${percent}%`);
-  const first = Math.ceil(range.start / step) * step;
-  const maxLines = 1000;
-  for (let i = 0, time = first; time <= range.end + 0.000001 && i < maxLines; i++, time += step) {
-    const line = document.createElement("span");
-    line.className = "ani-snap-line";
-    line.style.left = `${Math.max(0, Math.min(100, (time - range.start) / range.length * 100))}%`;
-    el.aniSnapLayer.append(line);
-  }
+  drawAniTimelineCanvas();
 }
 
-function updateAniTimelineCursor(percent) {
+function updateAniTimelineCursor(percent, syncOverlays = true) {
   const clamped = Math.max(0, Math.min(100, percent));
   el.aniTimelineProgress.style.width = `calc((100% - var(--ani-track-label-width)) * ${clamped / 100})`;
   el.aniTimelineCursor.style.left = `calc(var(--ani-track-label-width) + (100% - var(--ani-track-label-width)) * ${clamped / 100})`;
+  if (!syncOverlays) return;
   clampAniTimelinePanelHeight();
   syncAniTimelineOverlayHeight();
 }
@@ -5907,9 +5909,9 @@ function updateAniSliderVisual(time) {
 function syncAniTimelineOverlayHeight() {
   const height = Math.max(el.aniTimeline.clientHeight, el.aniKeyLayer.scrollHeight);
   const value = `${height}px`;
-  el.aniSnapLayer.style.height = value;
   el.aniTimelineProgress.style.height = value;
   el.aniTimelineCursor.style.height = value;
+  drawAniTimelineCanvas();
 }
 
 function getAniTimelinePanelMaxHeight() {
@@ -5935,8 +5937,10 @@ function clampAniTimelinePanelHeight() {
   const currentHeight = el.aniTimelinePanel.getBoundingClientRect().height;
   if (Math.abs(currentHeight - maxHeight) > 1 && currentHeight > maxHeight) {
     el.aniTimelinePanel.style.setProperty("--ani-timeline-panel-height", `${maxHeight}px`);
+    updateStatusPosition();
   } else if (!el.aniTimelinePanel.style.getPropertyValue("--ani-timeline-panel-height")) {
     el.aniTimelinePanel.style.setProperty("--ani-timeline-panel-height", `${Math.min(currentHeight || maxHeight, maxHeight)}px`);
+    updateStatusPosition();
   }
   const nextHeight = Math.min(currentHeight || maxHeight, maxHeight);
   el.aniTimelineResizeHandle.classList.toggle("disabled", nextHeight >= maxHeight - 1);
@@ -6004,11 +6008,16 @@ function updateAniRangeBar() {
 function installAniRangeBarHandlers() {
   el.aniRangeStartHandle.addEventListener("pointerdown", (event) => startAniRangeDrag(event, "start"));
   el.aniRangeEndHandle.addEventListener("pointerdown", (event) => startAniRangeDrag(event, "end"));
+  el.aniRangeFill.addEventListener("pointerdown", startAniRangeMove);
   el.aniRangeBar.addEventListener("pointerdown", (event) => {
-    if (event.target === el.aniRangeStartHandle || event.target === el.aniRangeEndHandle) return;
+    if (event.target === el.aniRangeStartHandle || event.target === el.aniRangeEndHandle || event.target === el.aniRangeFill) return;
     startAniRangeDrag(event, getNearestAniRangeHandle(event));
   });
   window.addEventListener("pointermove", (event) => {
+    if (state.draggingAniRangeMove && state.currentAnimation) {
+      moveAniRangeSelection(rangeBarTimeFromEvent(event));
+      return;
+    }
     if (!state.draggingAniRangeHandle || !state.currentAnimation) return;
     setAniRangeHandleFromTime(state.draggingAniRangeHandle, rangeBarTimeFromEvent(event));
   });
@@ -6032,8 +6041,35 @@ function startAniRangeDrag(event, handle) {
 
 function stopAniRangeDrag() {
   state.draggingAniRangeHandle = "";
+  state.draggingAniRangeMove = false;
   el.aniRangeStartHandle.classList.remove("active");
   el.aniRangeEndHandle.classList.remove("active");
+  el.aniRangeFill.classList.remove("dragging");
+}
+
+function startAniRangeMove(event) {
+  if (!state.currentAnimation) return;
+  event.preventDefault();
+  event.stopPropagation();
+  state.draggingAniRangeMove = true;
+  state.aniRangeMoveStartTime = rangeBarTimeFromEvent(event);
+  state.aniRangeMoveStartRange = { start: state.aniRangeStart, end: state.aniRangeEnd };
+  el.aniRangeFill.classList.add("dragging");
+}
+
+function moveAniRangeSelection(time) {
+  const duration = Math.max(state.currentAnimation?.duration || 0, 0);
+  const length = state.aniRangeMoveStartRange.end - state.aniRangeMoveStartRange.start;
+  const delta = time - state.aniRangeMoveStartTime;
+  let start = state.aniRangeMoveStartRange.start + delta;
+  start = Math.max(0, Math.min(Math.max(0, duration - length), start));
+  state.aniRangeStart = Number(start.toFixed(6));
+  state.aniRangeEnd = Number((start + length).toFixed(6));
+  if (state.animationFrame < state.aniRangeStart || state.animationFrame > state.aniRangeEnd) {
+    el.autoPlay.checked = false;
+    applyAnimation(state.aniRangeStart);
+  }
+  updateFrameControls();
 }
 
 function getNearestAniRangeHandle(event) {
@@ -6136,10 +6172,12 @@ function installAniTimelineResize() {
     const maxHeight = getAniTimelinePanelMaxHeight();
     const nextHeight = Math.max(120, Math.min(maxHeight, state.aniTimelineResizeStartHeight + state.aniTimelineResizeStartY - event.clientY));
     el.aniTimelinePanel.style.setProperty("--ani-timeline-panel-height", `${nextHeight}px`);
+    updateStatusPosition();
   });
   const stopResize = () => {
     state.draggingAniTimelineHeight = false;
     el.aniTimelineResizeHandle.classList.remove("dragging");
+    updateStatusPosition();
   };
   el.aniTimelineResizeHandle.addEventListener("pointerup", stopResize);
   el.aniTimelineResizeHandle.addEventListener("pointercancel", stopResize);
@@ -6196,10 +6234,105 @@ function getAniSnapStep() {
   return Math.max(0.0001, Number(el.aniSnapStep.value) || 0.01);
 }
 
-function renderAniTimelineKeys() {
-  el.aniKeyLayer.replaceChildren();
+function drawAniTimelineCanvas() {
+  const canvas = el.aniTimelineCanvas;
+  const ctx = canvas.getContext("2d");
+  const labelWidth = getAniTrackLabelWidth();
+  const timelineWidth = Math.max(1, el.aniTimeline.clientWidth - labelWidth);
+  const rowHeight = getAniTimelineRowHeight();
+  const visibleTracks = getVisibleAniTrackNames();
+  const contentHeight = Math.max(el.aniTimeline.clientHeight, visibleTracks.length * rowHeight);
+  const scrollTop = el.aniTimeline.scrollTop;
+  const dpr = window.devicePixelRatio || 1;
+  const pixelWidth = Math.max(1, Math.ceil(timelineWidth * dpr));
+  const pixelHeight = Math.max(1, Math.ceil(contentHeight * dpr));
+  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+  canvas.style.left = `${labelWidth}px`;
+  canvas.style.width = `${timelineWidth}px`;
+  canvas.style.height = `${contentHeight}px`;
+  canvas.style.top = `0px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, timelineWidth, contentHeight);
+  state.aniTimelineKeyHits = [];
   if (!state.currentAnimation) return;
   const range = getAniRange();
+  if (el.aniSnapKeys.checked && range.length > 0) {
+    const step = getAniSnapStep();
+    const first = Math.ceil(range.start / step) * step;
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0, time = first; time <= range.end + 0.000001 && i < 1000; i++, time += step) {
+      const x = Math.max(0, Math.min(timelineWidth, (time - range.start) / range.length * timelineWidth));
+      ctx.moveTo(x + 0.5, 0);
+      ctx.lineTo(x + 0.5, contentHeight);
+    }
+    ctx.stroke();
+  }
+  for (const [rowIndex, partName] of visibleTracks.entries()) {
+    const y = rowIndex * rowHeight + rowHeight / 2;
+    for (const time of getAniPartKeyTimes(partName)) {
+      if (time < range.start || time > range.end) continue;
+      const x = Math.max(0, Math.min(timelineWidth, (time - range.start) / range.length * timelineWidth));
+      const active = partName === state.selectedAniPartName && isSameAniTime(time, state.selectedAniKeyTime);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = active ? "#ff6aa8" : "#e5b85b";
+      ctx.strokeStyle = active ? "#ffffff" : "rgba(255,255,255,0.7)";
+      ctx.lineWidth = 1;
+      ctx.fillRect(-4, -4, 8, 8);
+      ctx.strokeRect(-4, -4, 8, 8);
+      ctx.restore();
+      ctx.strokeStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.moveTo(x, y - rowHeight / 2);
+      ctx.lineTo(x, y + rowHeight / 2);
+      ctx.stroke();
+      state.aniTimelineKeyHits.push({ partName, time, x, y, rowIndex });
+    }
+  }
+}
+
+function getAniTimelineRowHeight() {
+  return parseFloat(getComputedStyle(el.aniTimelinePanel).getPropertyValue("--ani-track-row-height")) || 28;
+}
+
+function hitAniTimelineKey(event, partName) {
+  const labelWidth = getAniTrackLabelWidth();
+  const rect = el.aniTimeline.getBoundingClientRect();
+  const x = event.clientX - rect.left - labelWidth;
+  const y = event.clientY - rect.top + el.aniTimeline.scrollTop;
+  const threshold = 8;
+  let best = null;
+  for (const hit of state.aniTimelineKeyHits) {
+    if (partName && hit.partName !== partName) continue;
+    const dx = Math.abs(hit.x - x);
+    const dy = Math.abs(hit.y - y);
+    if (dx <= threshold && dy <= threshold && (!best || dx + dy < best.distance)) {
+      best = { ...hit, distance: dx + dy };
+    }
+  }
+  return best;
+}
+
+function updateAniTimelineHoverCursor(event) {
+  if (!state.currentAnimation || state.draggingAniKeyTime != null) return;
+  const hit = hitAniTimelineKey(event, "");
+  if (!hit) {
+    el.aniTimeline.style.cursor = "";
+    return;
+  }
+  el.aniTimeline.style.cursor = hit.partName === state.selectedAniPartName && isSameAniTime(hit.time, state.selectedAniKeyTime)
+    ? "grab"
+    : "pointer";
+}
+
+function renderAniTimelineKeys() {
+  el.aniKeyLayer.replaceChildren();
+  state.aniTimelineKeyHits = [];
+  if (!state.currentAnimation) return;
   const visibleTracks = getVisibleAniTrackNames();
   el.aniTimeline.style.setProperty("--ani-track-count", String(Math.max(1, visibleTracks.length)));
   for (const partName of visibleTracks) {
@@ -6224,36 +6357,22 @@ function renderAniTimelineKeys() {
     const keys = document.createElement("div");
     keys.className = "ani-track-keys";
     keys.addEventListener("pointerdown", (event) => {
-      if (event.target.closest(".ani-key")) return;
+      const hit = hitAniTimelineKey(event, partName);
+      if (hit) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (hit.partName !== state.selectedAniPartName || !isSameAniTime(hit.time, state.selectedAniKeyTime)) {
+          selectAniKey(hit.partName, hit.time);
+          return;
+        }
+        state.draggingAniKeyTime = hit.time;
+        state.draggingAniPartName = hit.partName;
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       seekAniTimelineTime(timelineTimeFromEvent(event, true));
     });
-    for (const time of getAniPartKeyTimes(partName)) {
-      if (time < range.start || time > range.end) continue;
-      const key = document.createElement("span");
-      key.className = "ani-key";
-      key.tabIndex = 0;
-      key.setAttribute("role", "button");
-      key.classList.toggle("active", partName === state.selectedAniPartName && isSameAniTime(time, state.selectedAniKeyTime));
-      key.style.left = `${Math.max(0, Math.min(100, (time - range.start) / range.length * 100))}%`;
-      key.title = `${partName} @ ${formatNumber(time)}`;
-      key.addEventListener("click", (event) => {
-        event.stopPropagation();
-        selectAniKey(partName, time);
-      });
-      key.addEventListener("pointerdown", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (partName !== state.selectedAniPartName || !isSameAniTime(time, state.selectedAniKeyTime)) {
-          selectAniKey(partName, time);
-          return;
-        }
-        state.draggingAniKeyTime = time;
-        state.draggingAniPartName = partName;
-      });
-      keys.append(key);
-    }
     row.append(label, keys);
     el.aniKeyLayer.append(row);
   }
@@ -8214,6 +8333,7 @@ function resize() {
   camera.aspect = width / Math.max(height, 1);
   camera.updateProjectionMatrix();
   renderer.setSize(width, height, true);
+  if (state.currentAnimation && !el.aniTimelinePanel.hidden) drawAniTimelineCanvas();
 }
 
 function animate() {
@@ -8224,7 +8344,7 @@ function animate() {
   if (state.currentAnimation && el.autoPlay.checked) {
     const range = getAniRange();
     applyAnimation(range.start + (((getNow() - state.animationStartTime) * ANIMATION_FPS) % range.length));
-    updateFrameControls();
+    updateAniTimelinePlayback();
   }
   updateKeyboardCamera(deltaSeconds);
   updateMeshNameLabels();
