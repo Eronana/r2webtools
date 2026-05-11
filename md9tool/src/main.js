@@ -37,9 +37,13 @@ const el = {
   clearAnimations: document.querySelector("#clearAnimations"),
   autoPlay: document.querySelector("#autoPlay"),
   aniTimelinePanel: document.querySelector("#aniTimelinePanel"),
+  aniTimelineResizeHandle: document.querySelector("#aniTimelineResizeHandle"),
   aniTimeline: document.querySelector("#aniTimeline"),
+  aniSnapLayer: document.querySelector("#aniSnapLayer"),
   aniTimelineProgress: document.querySelector("#aniTimelineProgress"),
   aniTimelineCursor: document.querySelector("#aniTimelineCursor"),
+  aniSliderTrack: document.querySelector("#aniSliderTrack"),
+  aniSliderThumb: document.querySelector("#aniSliderThumb"),
   aniTimeSlider: document.querySelector("#aniTimeSlider"),
   aniRangeBar: document.querySelector("#aniRangeBar"),
   aniRangeFill: document.querySelector("#aniRangeFill"),
@@ -48,10 +52,11 @@ const el = {
   aniKeyLayer: document.querySelector("#aniKeyLayer"),
   aniSnapKeys: document.querySelector("#aniSnapKeys"),
   aniSnapStep: document.querySelector("#aniSnapStep"),
-  aniAddKey: document.querySelector("#aniAddKey"),
+  aniSelectTracks: document.querySelector("#aniSelectTracks"),
+  aniTrackDialog: document.querySelector("#aniTrackDialog"),
+  aniTrackList: document.querySelector("#aniTrackList"),
   aniKeyEditor: document.querySelector("#aniKeyEditor"),
   aniKeyTransform: document.querySelector(".ani-key-transform"),
-  aniKeyPartList: document.querySelector("#aniKeyPartList"),
   aniDeleteKey: document.querySelector("#aniDeleteKey"),
   aniPrevKey: document.querySelector("#aniPrevKey"),
   aniNextKey: document.querySelector("#aniNextKey"),
@@ -192,10 +197,10 @@ const I18N = {
     rangeStart: "Start",
     rangeEnd: "End",
     addKey: "Add key",
+    selectTracks: "Select tracks",
     time: "Time",
     keyParts: "Key parts",
     deleteKey: "Delete key",
-    keyHasPartsConfirm: "This key still has parts. Delete all keys at this time?",
     animationSaved: "Saved {name}",
     globalOptions: "Global options",
     targetHeight: "Target height",
@@ -342,10 +347,10 @@ const I18N = {
     rangeStart: "起点",
     rangeEnd: "终点",
     addKey: "添加关键帧",
+    selectTracks: "选择轨道",
     time: "时间",
     keyParts: "关键帧部件",
     deleteKey: "删除关键帧",
-    keyHasPartsConfirm: "这个关键帧仍包含部件，是否删除该时间点的所有 key？",
     animationSaved: "已保存 {name}",
     globalOptions: "全局选项",
     targetHeight: "目标高度",
@@ -492,10 +497,10 @@ const I18N = {
     rangeStart: "Inicio",
     rangeEnd: "Fin",
     addKey: "Agregar key",
+    selectTracks: "Elegir pistas",
     time: "Tiempo",
     keyParts: "Partes key",
     deleteKey: "Borrar key",
-    keyHasPartsConfirm: "Este key aun tiene partes. Borrar todos los keys en este tiempo?",
     animationSaved: "Guardado {name}",
     globalOptions: "Opciones globales",
     targetHeight: "Altura obj.",
@@ -682,8 +687,15 @@ const state = {
   selectedAniKeyTime: null,
   selectedAniPartName: "",
   draggingAniKeyTime: null,
+  draggingAniPartName: "",
+  visibleAniTracks: null,
+  aniTrackSelectionTouched: false,
   draggingAniEditor: false,
   draggingAniRangeHandle: "",
+  draggingAniTimelineHeight: false,
+  draggingAniSlider: false,
+  aniTimelineResizeStartY: 0,
+  aniTimelineResizeStartHeight: 0,
   aniEditorDragOffset: { x: 0, y: 0 },
   batchTransformMatrix: new THREE.Matrix4(),
   batchSelectedParts: new Set(),
@@ -759,7 +771,7 @@ el.autoPlay.addEventListener("change", () => {
     state.animationStartTime = getNow() - state.animationFrame / ANIMATION_FPS;
   }
 });
-el.aniAddKey.addEventListener("click", addAniKeyAtCurrentTime);
+el.aniSelectTracks.addEventListener("click", openAniTrackDialog);
 el.aniDeleteKey.addEventListener("click", deleteSelectedAniKey);
 el.aniPrevKey.addEventListener("click", () => selectAdjacentAniKey(-1));
 el.aniNextKey.addEventListener("click", () => selectAdjacentAniKey(1));
@@ -777,6 +789,8 @@ el.aniTimeSlider.addEventListener("input", () => {
 });
 installAniTimelineHandlers();
 installAniKeyEditorDrag();
+installAniTimelineResize();
+installAniSliderHandlers();
 installAniRangeBarHandlers();
 
 for (const input of [
@@ -1065,6 +1079,9 @@ async function loadSelectedAnimation(id) {
     state.animationFrame = 0;
     state.selectedAniKeyTime = null;
     state.selectedAniPartName = "";
+    state.draggingAniPartName = "";
+    state.visibleAniTracks = null;
+    state.aniTrackSelectionTouched = false;
     el.animationSelect.value = "";
     el.saveAnimation.disabled = true;
     resetPose();
@@ -1085,6 +1102,8 @@ async function loadSelectedAnimation(id) {
     state.aniRangeEnd = item.animation.duration || 0;
     state.selectedAniKeyTime = null;
     state.selectedAniPartName = "";
+    state.draggingAniPartName = "";
+    initializeVisibleAniTracks();
     el.saveAnimation.disabled = false;
     applyAnimation(0);
     updateFrameControls();
@@ -1187,6 +1206,9 @@ function clearActiveAnimationForStaticModel() {
   state.aniRangeEnd = 0;
   state.selectedAniKeyTime = null;
   state.selectedAniPartName = "";
+  state.draggingAniPartName = "";
+  state.visibleAniTracks = null;
+  state.aniTrackSelectionTouched = false;
 }
 
 function parseMd9(buffer, name, baseDir) {
@@ -5814,16 +5836,16 @@ function updateFrameControls() {
   el.frameLabel.textContent = `${formatNumber(current)} / ${formatNumber(duration)}`;
   el.aniTimelinePanel.hidden = !state.currentAnimation;
   el.aniTimelinePanel.classList.toggle("disabled", !state.currentAnimation);
-  el.aniAddKey.disabled = !state.currentAnimation;
+  el.aniSelectTracks.disabled = !state.currentAnimation;
   el.aniTimeSlider.disabled = !state.currentAnimation;
   el.aniTimeSlider.min = formatNumber(range.start);
   el.aniTimeSlider.max = formatNumber(Math.max(range.end, range.start + 0.0001));
   el.aniTimeSlider.value = formatNumber(current);
+  updateAniSliderVisual(current);
   updateAniRangeBar();
   updateAniSnapGrid();
-  el.aniTimelineProgress.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-  el.aniTimelineCursor.style.left = `${Math.max(0, Math.min(100, percent))}%`;
   renderAniTimelineKeys();
+  updateAniTimelineCursor(percent);
   renderAniKeyEditor();
   updateStatusPosition();
 }
@@ -5838,16 +5860,16 @@ function updateAniTimelinePlayback() {
   el.aniTimeSlider.min = formatNumber(range.start);
   el.aniTimeSlider.max = formatNumber(Math.max(range.end, range.start + 0.0001));
   el.aniTimeSlider.value = formatNumber(current);
+  updateAniSliderVisual(current);
   updateAniRangeBar();
   updateAniSnapGrid();
-  el.aniTimelineProgress.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-  el.aniTimelineCursor.style.left = `${Math.max(0, Math.min(100, percent))}%`;
-  renderAniTimelineKeys();
+  updateAniTimelineCursor(percent);
   updateStatusPosition();
 }
 
 function updateAniSnapGrid() {
   const range = getAniRange();
+  el.aniSnapLayer.replaceChildren();
   if (!state.currentAnimation || !el.aniSnapKeys.checked || range.length <= 0) {
     el.aniTimeline.style.removeProperty("--snap-step");
     return;
@@ -5855,6 +5877,97 @@ function updateAniSnapGrid() {
   const step = getAniSnapStep();
   const percent = Math.max(0.2, Math.min(100, step / range.length * 100));
   el.aniTimeline.style.setProperty("--snap-step", `${percent}%`);
+  const first = Math.ceil(range.start / step) * step;
+  const maxLines = 1000;
+  for (let i = 0, time = first; time <= range.end + 0.000001 && i < maxLines; i++, time += step) {
+    const line = document.createElement("span");
+    line.className = "ani-snap-line";
+    line.style.left = `${Math.max(0, Math.min(100, (time - range.start) / range.length * 100))}%`;
+    el.aniSnapLayer.append(line);
+  }
+}
+
+function updateAniTimelineCursor(percent) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  el.aniTimelineProgress.style.width = `calc((100% - var(--ani-track-label-width)) * ${clamped / 100})`;
+  el.aniTimelineCursor.style.left = `calc(var(--ani-track-label-width) + (100% - var(--ani-track-label-width)) * ${clamped / 100})`;
+  clampAniTimelinePanelHeight();
+  syncAniTimelineOverlayHeight();
+}
+
+function updateAniSliderVisual(time) {
+  const range = getAniRange();
+  const percent = range.length > 0 ? Math.max(0, Math.min(100, (time - range.start) / range.length * 100)) : 0;
+  el.aniSliderThumb.style.left = `${percent}%`;
+  el.aniSliderTrack.setAttribute("aria-valuemin", formatNumber(range.start));
+  el.aniSliderTrack.setAttribute("aria-valuemax", formatNumber(range.end));
+  el.aniSliderTrack.setAttribute("aria-valuenow", formatNumber(time));
+}
+
+function syncAniTimelineOverlayHeight() {
+  const height = Math.max(el.aniTimeline.clientHeight, el.aniKeyLayer.scrollHeight);
+  const value = `${height}px`;
+  el.aniSnapLayer.style.height = value;
+  el.aniTimelineProgress.style.height = value;
+  el.aniTimelineCursor.style.height = value;
+}
+
+function getAniTimelinePanelMaxHeight() {
+  const viewportHeight = el.viewport.getBoundingClientRect().height;
+  const viewportCap = Math.max(160, Math.min(640, viewportHeight * 0.72));
+  const panelStyle = getComputedStyle(el.aniTimelinePanel);
+  const paddingY = parseFloat(panelStyle.paddingTop) + parseFloat(panelStyle.paddingBottom);
+  const borderY = parseFloat(panelStyle.borderTopWidth) + parseFloat(panelStyle.borderBottomWidth);
+  const gap = parseFloat(panelStyle.rowGap) || 0;
+  const headHeight = el.aniTimelinePanel.querySelector(".ani-timeline-head")?.getBoundingClientRect().height || 0;
+  const sliderHeight = el.aniTimelinePanel.querySelector(".ani-slider-row")?.getBoundingClientRect().height || 0;
+  const timelineStyle = getComputedStyle(el.aniTimeline);
+  const timelineBorderY = parseFloat(timelineStyle.borderTopWidth) + parseFloat(timelineStyle.borderBottomWidth);
+  const rowHeight = parseFloat(panelStyle.getPropertyValue("--ani-track-row-height")) || 28;
+  const timelineHeight = Math.max(rowHeight + timelineBorderY, Math.ceil(el.aniKeyLayer.children.length * rowHeight + timelineBorderY));
+  const contentHeight = Math.ceil(borderY + paddingY + headHeight + sliderHeight + timelineHeight + gap * 2);
+  return Math.max(120, Math.min(viewportCap, contentHeight));
+}
+
+function clampAniTimelinePanelHeight() {
+  if (!state.currentAnimation || el.aniTimelinePanel.hidden) return;
+  const maxHeight = getAniTimelinePanelMaxHeight();
+  const currentHeight = el.aniTimelinePanel.getBoundingClientRect().height;
+  if (Math.abs(currentHeight - maxHeight) > 1 && currentHeight > maxHeight) {
+    el.aniTimelinePanel.style.setProperty("--ani-timeline-panel-height", `${maxHeight}px`);
+  } else if (!el.aniTimelinePanel.style.getPropertyValue("--ani-timeline-panel-height")) {
+    el.aniTimelinePanel.style.setProperty("--ani-timeline-panel-height", `${Math.min(currentHeight || maxHeight, maxHeight)}px`);
+  }
+  const nextHeight = Math.min(currentHeight || maxHeight, maxHeight);
+  el.aniTimelineResizeHandle.classList.toggle("disabled", nextHeight >= maxHeight - 1);
+}
+
+function initializeVisibleAniTracks() {
+  state.visibleAniTracks = new Set(getDefaultVisibleAniTrackNames());
+  state.aniTrackSelectionTouched = false;
+}
+
+function getDefaultVisibleAniTrackNames() {
+  const names = getAnimatedPartNames();
+  if (names.length) return names;
+  return state.currentModel?.submeshes?.map((part) => part.name) || [];
+}
+
+function getAnimatedPartNames() {
+  if (!state.currentAnimation) return [];
+  const names = [];
+  for (const [partName, track] of state.currentAnimation.tracks) {
+    if ((track.positions?.length || 0) || (track.rotations?.length || 0) || (track.scales?.length || 0)) names.push(partName);
+  }
+  return names.sort((a, b) => a.localeCompare(b));
+}
+
+function getVisibleAniTrackNames() {
+  if (!state.currentModel) return [];
+  if (!state.visibleAniTracks) initializeVisibleAniTracks();
+  return state.currentModel.submeshes
+    .map((part) => part.name)
+    .filter((partName) => state.visibleAniTracks.has(partName));
 }
 
 function ensureAniRange() {
@@ -5963,7 +6076,7 @@ function installAniTimelineHandlers() {
     if (state.draggingAniKeyTime == null || !state.currentAnimation) return;
     const nextTime = timelineTimeFromEvent(event, true);
     if (isSameAniTime(nextTime, state.draggingAniKeyTime)) return;
-    moveAniKeyTime(state.draggingAniKeyTime, nextTime);
+    moveAniPartKeyTime(state.draggingAniPartName, state.draggingAniKeyTime, nextTime);
     state.draggingAniKeyTime = nextTime;
     state.selectedAniKeyTime = nextTime;
     applyAnimation(nextTime);
@@ -5971,15 +6084,17 @@ function installAniTimelineHandlers() {
   });
   window.addEventListener("pointerup", () => {
     state.draggingAniKeyTime = null;
+    state.draggingAniPartName = "";
   });
   window.addEventListener("pointercancel", () => {
     state.draggingAniKeyTime = null;
+    state.draggingAniPartName = "";
   });
 }
 
 function installAniKeyEditorDrag() {
   el.aniKeyEditor.addEventListener("pointerdown", (event) => {
-    if (event.target.closest("input, button, select, textarea")) return;
+    if (event.target.closest("input, button, select, textarea, label")) return;
     state.draggingAniEditor = true;
     const panelRect = el.aniTimelinePanel.getBoundingClientRect();
     const editorRect = el.aniKeyEditor.getBoundingClientRect();
@@ -6006,16 +6121,75 @@ function installAniKeyEditorDrag() {
   el.aniKeyEditor.addEventListener("pointercancel", stopDrag);
 }
 
+function installAniTimelineResize() {
+  if (!el.aniTimelineResizeHandle) return;
+  el.aniTimelineResizeHandle.addEventListener("pointerdown", (event) => {
+    state.draggingAniTimelineHeight = true;
+    state.aniTimelineResizeStartY = event.clientY;
+    state.aniTimelineResizeStartHeight = el.aniTimelinePanel.getBoundingClientRect().height;
+    el.aniTimelineResizeHandle.classList.add("dragging");
+    el.aniTimelineResizeHandle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  el.aniTimelineResizeHandle.addEventListener("pointermove", (event) => {
+    if (!state.draggingAniTimelineHeight) return;
+    const maxHeight = getAniTimelinePanelMaxHeight();
+    const nextHeight = Math.max(120, Math.min(maxHeight, state.aniTimelineResizeStartHeight + state.aniTimelineResizeStartY - event.clientY));
+    el.aniTimelinePanel.style.setProperty("--ani-timeline-panel-height", `${nextHeight}px`);
+  });
+  const stopResize = () => {
+    state.draggingAniTimelineHeight = false;
+    el.aniTimelineResizeHandle.classList.remove("dragging");
+  };
+  el.aniTimelineResizeHandle.addEventListener("pointerup", stopResize);
+  el.aniTimelineResizeHandle.addEventListener("pointercancel", stopResize);
+}
+
+function installAniSliderHandlers() {
+  const setTimeFromEvent = (event) => {
+    if (!state.currentAnimation) return;
+    const rect = el.aniSliderTrack.getBoundingClientRect();
+    const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
+    const range = getAniRange();
+    const time = Number(Math.max(range.start, Math.min(range.end, range.start + Math.max(0, Math.min(1, ratio)) * range.length)).toFixed(6));
+    el.autoPlay.checked = false;
+    applyAnimation(time);
+    updateAniTimelinePlayback();
+  };
+  el.aniSliderTrack.addEventListener("pointerdown", (event) => {
+    state.draggingAniSlider = true;
+    el.aniSliderTrack.setPointerCapture(event.pointerId);
+    setTimeFromEvent(event);
+    event.preventDefault();
+  });
+  el.aniSliderTrack.addEventListener("pointermove", (event) => {
+    if (!state.draggingAniSlider) return;
+    setTimeFromEvent(event);
+  });
+  const stopDrag = () => {
+    state.draggingAniSlider = false;
+  };
+  el.aniSliderTrack.addEventListener("pointerup", stopDrag);
+  el.aniSliderTrack.addEventListener("pointercancel", stopDrag);
+}
+
 function timelineTimeFromEvent(event, snap) {
   const range = getAniRange();
   const rect = el.aniTimeline.getBoundingClientRect();
-  const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
+  const labelWidth = getAniTrackLabelWidth();
+  const timelineLeft = rect.left + labelWidth;
+  const timelineWidth = Math.max(1, rect.width - labelWidth);
+  const ratio = (event.clientX - timelineLeft) / timelineWidth;
   let time = Math.max(range.start, Math.min(range.end, range.start + ratio * range.length));
   if (snap && el.aniSnapKeys.checked) {
     const step = getAniSnapStep();
     time = Math.round(time / step) * step;
   }
   return Number(time.toFixed(6));
+}
+
+function getAniTrackLabelWidth() {
+  return parseFloat(getComputedStyle(el.aniTimeline).getPropertyValue("--ani-track-label-width")) || 142;
 }
 
 function getAniSnapStep() {
@@ -6026,38 +6200,97 @@ function renderAniTimelineKeys() {
   el.aniKeyLayer.replaceChildren();
   if (!state.currentAnimation) return;
   const range = getAniRange();
-  for (const time of getAniKeyTimes()) {
-    if (time < range.start || time > range.end) continue;
-    const key = document.createElement("span");
-    key.className = "ani-key";
-    key.tabIndex = 0;
-    key.setAttribute("role", "button");
-    key.classList.toggle("active", isSameAniTime(time, state.selectedAniKeyTime));
-    key.style.left = `${Math.max(0, Math.min(100, (time - range.start) / range.length * 100))}%`;
-    key.title = formatNumber(time);
-    key.addEventListener("click", (event) => {
+  const visibleTracks = getVisibleAniTrackNames();
+  el.aniTimeline.style.setProperty("--ani-track-count", String(Math.max(1, visibleTracks.length)));
+  for (const partName of visibleTracks) {
+    const row = document.createElement("div");
+    row.className = "ani-track-row";
+    row.dataset.partName = partName;
+    const label = document.createElement("div");
+    label.className = "ani-track-label";
+    label.title = partName;
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.className = "ani-track-add";
+    addButton.textContent = "+";
+    addButton.title = `${t("addKey")} ${partName}`;
+    addButton.addEventListener("click", (event) => {
       event.stopPropagation();
-      selectAniKeyTime(time);
+      addAniKeyForPart(partName);
     });
-    key.addEventListener("pointerdown", (event) => {
+    const labelText = document.createElement("span");
+    labelText.textContent = partName;
+    label.append(addButton, labelText);
+    const keys = document.createElement("div");
+    keys.className = "ani-track-keys";
+    keys.addEventListener("pointerdown", (event) => {
+      if (event.target.closest(".ani-key")) return;
       event.preventDefault();
       event.stopPropagation();
-      if (!isSameAniTime(time, state.selectedAniKeyTime)) {
-        selectAniKeyTime(time);
-        return;
-      }
-      state.draggingAniKeyTime = time;
+      seekAniTimelineTime(timelineTimeFromEvent(event, true));
     });
-    el.aniKeyLayer.append(key);
+    for (const time of getAniPartKeyTimes(partName)) {
+      if (time < range.start || time > range.end) continue;
+      const key = document.createElement("span");
+      key.className = "ani-key";
+      key.tabIndex = 0;
+      key.setAttribute("role", "button");
+      key.classList.toggle("active", partName === state.selectedAniPartName && isSameAniTime(time, state.selectedAniKeyTime));
+      key.style.left = `${Math.max(0, Math.min(100, (time - range.start) / range.length * 100))}%`;
+      key.title = `${partName} @ ${formatNumber(time)}`;
+      key.addEventListener("click", (event) => {
+        event.stopPropagation();
+        selectAniKey(partName, time);
+      });
+      key.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (partName !== state.selectedAniPartName || !isSameAniTime(time, state.selectedAniKeyTime)) {
+          selectAniKey(partName, time);
+          return;
+        }
+        state.draggingAniKeyTime = time;
+        state.draggingAniPartName = partName;
+      });
+      keys.append(key);
+    }
+    row.append(label, keys);
+    el.aniKeyLayer.append(row);
   }
+  clampAniTimelinePanelHeight();
+  syncAniTimelineOverlayHeight();
+  requestAnimationFrame(() => {
+    clampAniTimelinePanelHeight();
+    syncAniTimelineOverlayHeight();
+  });
+}
+
+function selectAniKey(partName, time) {
+  state.selectedAniKeyTime = time;
+  state.selectedAniPartName = partName;
+  el.autoPlay.checked = false;
+  applyAnimation(time);
+  updateFrameControls();
 }
 
 function selectAniKeyTime(time) {
-  state.selectedAniKeyTime = time;
   const parts = getAniPartsAtTime(time);
-  state.selectedAniPartName = parts.includes(state.selectedAniPartName) ? state.selectedAniPartName : (parts[0] || "");
+  selectAniKey(parts.includes(state.selectedAniPartName) ? state.selectedAniPartName : (parts[0] || getVisibleAniTrackNames()[0] || ""), time);
+}
+
+function seekAniTimelineTime(time) {
+  state.selectedAniKeyTime = null;
+  state.selectedAniPartName = "";
   el.autoPlay.checked = false;
   applyAnimation(time);
+  updateFrameControls();
+}
+
+function selectAniTrackAtTime(partName, time) {
+  state.selectedAniPartName = partName;
+  state.selectedAniKeyTime = Number(time.toFixed(6));
+  el.autoPlay.checked = false;
+  applyAnimation(state.selectedAniKeyTime);
   updateFrameControls();
 }
 
@@ -6072,9 +6305,8 @@ function clearSelectedAniKey() {
 }
 
 function renderAniKeyEditor() {
-  el.aniKeyPartList.replaceChildren();
   el.aniTransformEditor.replaceChildren();
-  const disabled = !state.currentAnimation || state.selectedAniKeyTime == null;
+  const disabled = !state.currentAnimation || state.selectedAniKeyTime == null || !state.selectedAniPartName;
   el.aniKeyEditor.hidden = disabled;
   el.aniKeyEditor.classList.toggle("disabled", disabled);
   if (!state.currentModel) {
@@ -6086,31 +6318,10 @@ function renderAniKeyEditor() {
     return;
   }
   el.aniDeleteKey.disabled = false;
-  const parts = getAniPartsAtTime(state.selectedAniKeyTime);
-  if (!state.selectedAniPartName && state.currentModel.submeshes.length) state.selectedAniPartName = state.currentModel.submeshes[0].name;
-  for (const part of state.currentModel.submeshes) {
-    const partName = part.name;
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "ani-key-part";
-    row.classList.toggle("has-key", parts.includes(partName));
-    row.classList.toggle("active", partName === state.selectedAniPartName);
-    row.textContent = partName;
-    row.addEventListener("click", () => {
-      state.selectedAniPartName = partName;
-      renderAniKeyEditor();
-    });
-    el.aniKeyPartList.append(row);
-  }
-  if (!state.selectedAniPartName) {
-    el.aniKeyTransformTitle.textContent = "-";
-    return;
-  }
   el.aniKeyTransformTitle.textContent = `${state.selectedAniPartName} @ ${formatNumber(state.selectedAniKeyTime)}`;
   el.aniKeyTimeInput.value = formatNumber(state.selectedAniKeyTime);
   buildAniTransformEditor(state.selectedAniPartName, state.selectedAniKeyTime);
   positionAniKeyEditorInitial();
-  syncAniKeyPartListHeight();
 }
 
 function buildAniTransformEditor(partName, time) {
@@ -6145,23 +6356,10 @@ function buildAniTransformEditor(partName, time) {
   }
 }
 
-function syncAniKeyPartListHeight() {
-  requestAnimationFrame(() => {
-    if (el.aniKeyEditor.hidden) return;
-    const transformHeight = el.aniKeyTransform.getBoundingClientRect().height;
-    const partsRect = el.aniKeyPartList.getBoundingClientRect();
-    const editorRect = el.aniKeyEditor.getBoundingClientRect();
-    const available = Math.max(52, transformHeight - (partsRect.top - editorRect.top) + 10);
-    el.aniKeyPartList.style.setProperty("--ani-key-part-list-max-height", `${available}px`);
-  });
-}
-
 function positionAniKeyEditorInitial() {
   if (el.aniKeyEditor.style.left || el.aniKeyEditor.style.top) return;
   requestAnimationFrame(() => {
     if (el.aniKeyEditor.hidden || el.aniKeyEditor.style.left || el.aniKeyEditor.style.top) return;
-    const panelRect = el.aniTimelinePanel.getBoundingClientRect();
-    const timelineRect = el.aniTimeline.getBoundingClientRect();
     const editorRect = el.aniKeyEditor.getBoundingClientRect();
     el.aniKeyEditor.style.left = `10px`;
     el.aniKeyEditor.style.top = `${-editorRect.height - 10}px`;
@@ -6198,6 +6396,7 @@ function handleAniTransformEditorInput(event) {
   } else if (hasAniTransformKey(state.selectedAniPartName, type, state.selectedAniKeyTime)) {
     setAniTransformKey(track, type, state.selectedAniKeyTime, values);
   }
+  if (!state.aniTrackSelectionTouched) initializeVisibleAniTracks();
   applyAnimation(state.animationFrame);
   updateAniTimelinePlayback();
 }
@@ -6222,23 +6421,51 @@ function readAniTransformInputs(type) {
   return values;
 }
 
-function addAniKeyAtCurrentTime() {
+function addAniKeyForPart(partName) {
   if (!state.currentAnimation) return;
   state.selectedAniKeyTime = Number(state.animationFrame.toFixed(6));
-  state.selectedAniPartName = "";
+  state.selectedAniPartName = partName || getDefaultAniTargetPartName();
+  if (state.selectedAniPartName) {
+    const track = ensureAniTrack(state.selectedAniPartName);
+    const transform = getAniTransformValues(state.selectedAniPartName, state.selectedAniKeyTime);
+    const types = getAniKeyTypesForNewKey(track, state.selectedAniKeyTime);
+    for (const type of types) setAniTransformKey(track, type, state.selectedAniKeyTime, transform[type]);
+    state.visibleAniTracks ||= new Set();
+    state.visibleAniTracks.add(state.selectedAniPartName);
+  }
   el.autoPlay.checked = false;
   updateFrameControls();
 }
 
+function getAniKeyTypesForNewKey(track, time) {
+  let previousTime = null;
+  for (const key of [...track.positions, ...track.rotations, ...track.scales]) {
+    if (key.time < time && (previousTime == null || key.time > previousTime)) previousTime = key.time;
+  }
+  if (previousTime == null) return ["position"];
+  const types = [];
+  if (track.positions.some((key) => isSameAniTime(key.time, previousTime))) types.push("position");
+  if (track.rotations.some((key) => isSameAniTime(key.time, previousTime))) types.push("rotation");
+  if (track.scales.some((key) => isSameAniTime(key.time, previousTime))) types.push("scale");
+  return types.length ? types : ["position"];
+}
+
+function getDefaultAniTargetPartName() {
+  const highlighted = state.currentModel?.submeshes?.[state.highlightedPartIndex]?.name || "";
+  if (highlighted) return highlighted;
+  if (state.selectedAniPartName) return state.selectedAniPartName;
+  return getVisibleAniTrackNames()[0] || state.currentModel?.submeshes?.[0]?.name || "";
+}
+
 function applyAniKeyTimeInput() {
-  if (!state.currentAnimation || state.selectedAniKeyTime == null) return;
+  if (!state.currentAnimation || state.selectedAniKeyTime == null || !state.selectedAniPartName) return;
   const duration = Math.max(state.currentAnimation.duration || 0, 0);
   const nextTime = Number(Math.max(0, Math.min(duration, Number(el.aniKeyTimeInput.value) || 0)).toFixed(6));
   if (isSameAniTime(nextTime, state.selectedAniKeyTime)) {
     el.aniKeyTimeInput.value = formatNumber(state.selectedAniKeyTime);
     return;
   }
-  moveAniKeyTime(state.selectedAniKeyTime, nextTime);
+  moveAniPartKeyTime(state.selectedAniPartName, state.selectedAniKeyTime, nextTime);
   state.selectedAniKeyTime = nextTime;
   el.autoPlay.checked = false;
   applyAnimation(nextTime);
@@ -6246,47 +6473,35 @@ function applyAniKeyTimeInput() {
 }
 
 function selectAdjacentAniKey(direction) {
-  if (!state.currentAnimation || state.selectedAniKeyTime == null) return;
-  const times = getAniKeyTimes();
+  if (!state.currentAnimation || state.selectedAniKeyTime == null || !state.selectedAniPartName) return;
+  const times = getAniPartKeyTimes(state.selectedAniPartName);
   if (!times.length) return;
   const index = times.findIndex((time) => isSameAniTime(time, state.selectedAniKeyTime));
   const nextIndex = Math.max(0, Math.min(times.length - 1, (index >= 0 ? index : 0) + direction));
-  selectAniKeyTime(times[nextIndex]);
+  selectAniKey(state.selectedAniPartName, times[nextIndex]);
 }
 
 function insertAniKeyAfterSelected() {
-  if (!state.currentAnimation || state.selectedAniKeyTime == null) return;
+  if (!state.currentAnimation || state.selectedAniKeyTime == null || !state.selectedAniPartName) return;
   const duration = Math.max(state.currentAnimation.duration || 0, 0);
   const interval = Math.max(0.0001, Number(el.aniKeyInterval.value) || 1);
   const nextTime = Number(Math.min(duration, state.selectedAniKeyTime + interval).toFixed(6));
   if (isSameAniTime(nextTime, state.selectedAniKeyTime)) return;
   state.selectedAniKeyTime = nextTime;
-  state.selectedAniPartName = "";
   el.autoPlay.checked = false;
   applyAnimation(nextTime);
   updateFrameControls();
 }
 
 function deleteSelectedAniKey() {
-  if (!state.currentAnimation || state.selectedAniKeyTime == null) return;
-  const parts = getAniPartsAtTime(state.selectedAniKeyTime);
-  if (parts.length && !window.confirm(t("keyHasPartsConfirm"))) return;
-  for (const track of state.currentAnimation.tracks.values()) {
-    removeTrackKeysAtTime(track, state.selectedAniKeyTime);
-  }
+  if (!state.currentAnimation || state.selectedAniKeyTime == null || !state.selectedAniPartName) return;
+  const track = state.currentAnimation.tracks.get(state.selectedAniPartName);
+  if (track) removeTrackKeysAtTime(track, state.selectedAniKeyTime);
+  if (!state.aniTrackSelectionTouched) initializeVisibleAniTracks();
   state.selectedAniKeyTime = null;
   state.selectedAniPartName = "";
+  applyAnimation(state.animationFrame);
   updateFrameControls();
-}
-
-function deleteAniPartAtSelectedTime(partName) {
-  const track = state.currentAnimation?.tracks.get(partName);
-  if (!track || state.selectedAniKeyTime == null) return;
-  removeTrackKeysAtTime(track, state.selectedAniKeyTime);
-  const parts = getAniPartsAtTime(state.selectedAniKeyTime);
-  state.selectedAniPartName = parts[0] || "";
-  renderAniKeyEditor();
-  renderAniTimelineKeys();
 }
 
 function getAniKeyTimes() {
@@ -6313,6 +6528,55 @@ function getAniPartsAtTime(time) {
   return parts;
 }
 
+function getAniPartKeyTimes(partName) {
+  const track = state.currentAnimation?.tracks.get(partName);
+  if (!track) return [];
+  const times = [];
+  for (const key of [...track.positions, ...track.rotations, ...track.scales]) {
+    if (!times.some((time) => isSameAniTime(time, key.time))) times.push(key.time);
+  }
+  return times.sort((a, b) => a - b);
+}
+
+function openAniTrackDialog() {
+  renderAniTrackSelection();
+  if (el.aniTrackDialog?.showModal) {
+    el.aniTrackDialog.showModal();
+  } else {
+    el.aniTrackDialog.hidden = false;
+  }
+}
+
+function renderAniTrackSelection() {
+  el.aniTrackList.replaceChildren();
+  if (!state.currentModel) return;
+  if (!state.visibleAniTracks) initializeVisibleAniTracks();
+  const keyed = new Set(getAnimatedPartNames());
+  for (const part of state.currentModel.submeshes) {
+    const partName = part.name;
+    const label = document.createElement("label");
+    label.className = "ani-track-choice ani-key-part";
+    label.classList.toggle("has-key", keyed.has(partName));
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = state.visibleAniTracks.has(partName);
+    checkbox.addEventListener("input", () => {
+      state.aniTrackSelectionTouched = true;
+      if (checkbox.checked) {
+        state.visibleAniTracks.add(partName);
+      } else {
+        state.visibleAniTracks.delete(partName);
+      }
+      renderAniTimelineKeys();
+      updateAniTimelineCursor(getAniRange().length > 0 ? (state.animationFrame - getAniRange().start) / getAniRange().length * 100 : 0);
+    });
+    const text = document.createElement("span");
+    text.textContent = partName;
+    label.append(checkbox, text);
+    el.aniTrackList.append(label);
+  }
+}
+
 function ensureAniTrack(partName) {
   if (!state.currentAnimation.tracks.has(partName)) {
     state.currentAnimation.tracks.set(partName, { boneName: partName, positions: [], rotations: [], scales: [] });
@@ -6320,15 +6584,14 @@ function ensureAniTrack(partName) {
   return state.currentAnimation.tracks.get(partName);
 }
 
-function moveAniKeyTime(fromTime, toTime) {
-  if (!state.currentAnimation) return;
-  for (const track of state.currentAnimation.tracks.values()) {
-    for (const keys of [track.positions, track.rotations, track.scales]) {
-      for (const key of keys) {
-        if (isSameAniTime(key.time, fromTime)) key.time = toTime;
-      }
-      sortAniKeys(keys);
+function moveAniPartKeyTime(partName, fromTime, toTime) {
+  const track = state.currentAnimation?.tracks.get(partName);
+  if (!track) return;
+  for (const keys of [track.positions, track.rotations, track.scales]) {
+    for (const key of keys) {
+      if (isSameAniTime(key.time, fromTime)) key.time = toTime;
     }
+    sortAniKeys(keys);
   }
 }
 

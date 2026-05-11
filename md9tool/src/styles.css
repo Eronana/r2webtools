@@ -487,16 +487,53 @@ input[type="checkbox"] {
 
 .ani-timeline-panel {
   position: relative;
+  --ani-track-label-width: 142px;
+  --ani-track-row-height: 28px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 8px;
+  height: var(--ani-timeline-panel-height, 320px);
   min-width: 0;
+  min-height: 120px;
+  max-height: min(72vh, 640px);
   border: 1px solid rgb(255 255 255 / 12%);
   border-width: 1px 0 0;
   border-radius: 0;
   background: rgb(18 22 26 / 96%);
   padding: 10px;
   z-index: 3;
+}
+
+.ani-timeline-resize-handle {
+  position: absolute;
+  top: -6px;
+  left: 0;
+  right: 0;
+  height: 10px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.ani-timeline-resize-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 72px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 28%);
+  transform: translateX(-50%);
+}
+
+.ani-timeline-resize-handle:hover::before,
+.ani-timeline-resize-handle.dragging::before {
+  background: var(--accent);
+}
+
+.ani-timeline-resize-handle.disabled::before {
+  background: rgb(255 255 255 / 16%);
 }
 
 .ani-timeline-panel.disabled {
@@ -599,8 +636,63 @@ input[type="checkbox"] {
   font-size: 12px;
 }
 
+.ani-slider-row {
+  display: grid;
+  grid-template-columns: var(--ani-track-label-width) minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+}
+
+.ani-slider-row button {
+  min-height: 26px;
+  height: 26px;
+  border-radius: 6px;
+  margin-right: 4px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 .ani-time-slider {
-  width: 100%;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ani-slider-track {
+  position: relative;
+  min-width: 0;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.ani-slider-track::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  transform: translateY(-50%);
+}
+
+.ani-slider-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 2px;
+  height: 18px;
+  border: 1px solid #fff;
+  border-radius: 999px;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 #frameLabel {
@@ -613,26 +705,40 @@ input[type="checkbox"] {
 
 .ani-timeline {
   position: relative;
-  height: 28px;
+  height: 100%;
+  min-height: calc(var(--ani-track-row-height) + 2px);
+  max-height: none;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background:
-    repeating-linear-gradient(
-      to right,
-      rgb(255 255 255 / 7%) 0,
-      rgb(255 255 255 / 7%) 1px,
-      transparent 1px,
-      transparent var(--snap-step, 100%)
-    ),
-    #101418;
+  background: #101418;
   cursor: pointer;
-  overflow: hidden;
+  overflow: auto;
+}
+
+.ani-snap-layer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--ani-track-label-width);
+  right: 0;
+  pointer-events: none;
+}
+
+.ani-snap-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgb(255 255 255 / 7%);
+  transform: translateX(-0.5px);
 }
 
 .ani-timeline-progress {
   position: absolute;
-  inset: 0 auto 0 0;
+  top: 0;
+  left: var(--ani-track-label-width);
   width: 0;
+  height: 100%;
   background: rgb(84 198 166 / 16%);
   pointer-events: none;
 }
@@ -640,16 +746,73 @@ input[type="checkbox"] {
 .ani-timeline-cursor {
   position: absolute;
   top: 0;
-  bottom: 0;
+  left: var(--ani-track-label-width);
   width: 1px;
+  height: 100%;
   background: var(--accent);
   transform: translateX(-0.5px);
   pointer-events: none;
 }
 
 .ani-key-layer {
-  position: absolute;
-  inset: 0;
+  display: grid;
+  align-content: start;
+  min-height: 100%;
+}
+
+.ani-track-row {
+  display: grid;
+  grid-template-columns: var(--ani-track-label-width) minmax(260px, 1fr);
+  height: var(--ani-track-row-height);
+  min-height: var(--ani-track-row-height);
+  border-bottom: 1px solid rgb(255 255 255 / 28%);
+}
+
+.ani-track-row:last-child {
+  border-bottom: 0;
+}
+
+.ani-track-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--ani-track-row-height);
+  height: var(--ani-track-row-height);
+  overflow: hidden;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: rgb(36 42 49 / 86%);
+  color: var(--muted);
+  padding: 0 8px;
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.ani-track-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ani-track-add {
+  flex: 0 0 auto;
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  border-radius: 4px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.ani-track-keys {
+  position: relative;
+  min-height: var(--ani-track-row-height);
 }
 
 .ani-key {
@@ -685,9 +848,9 @@ input[type="checkbox"] {
 }
 
 .ani-key::after {
-  top: -14px;
+  top: -10px;
   width: 1px;
-  height: 36px;
+  height: 28px;
   background: rgb(255 255 255 / 38%);
   z-index: -1;
 }
@@ -709,11 +872,8 @@ input[type="checkbox"] {
   position: absolute;
   left: 10px;
   z-index: 6;
-  display: grid;
-  grid-template-columns: 180px 300px;
-  align-items: stretch;
-  gap: 10px;
-  width: max-content;
+  width: min(760px, calc(100vw - var(--panel-width, 420px) - 48px));
+  min-width: min(520px, calc(100vw - var(--panel-width, 420px) - 48px));
   max-width: calc(100vw - var(--panel-width, 420px) - 48px);
   overflow: hidden;
   border: 1px solid var(--line);
@@ -728,31 +888,25 @@ input[type="checkbox"] {
   opacity: 0.64;
 }
 
-.ani-key-parts,
 .ani-key-transform {
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(180px, 1fr) max-content;
+  grid-template-areas:
+    "head nav"
+    "editor editor";
+  align-items: start;
+  gap: 8px 10px;
   min-width: 0;
   min-height: 0;
 }
 
-.ani-key-parts {
-  grid-template-rows: auto auto auto minmax(0, 1fr);
-  height: 100%;
-  overflow: hidden;
-  padding-right: 2px;
-}
-
 .ani-key-transform {
   align-content: start;
-  width: 300px;
+  width: 100%;
   max-width: 100%;
 }
 
 .ani-key-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
   width: 28px;
   min-height: 28px;
   background: var(--panel-2);
@@ -762,7 +916,8 @@ input[type="checkbox"] {
 
 .ani-key-nav {
   display: grid;
-  grid-template-columns: 28px minmax(58px, 1fr) 48px 28px;
+  grid-area: nav;
+  grid-template-columns: 32px 72px 54px 32px 66px 28px;
   gap: 4px;
   padding-right: 0;
 }
@@ -783,7 +938,6 @@ input[type="checkbox"] {
 }
 
 .ani-delete-key-row {
-  width: 100%;
   min-height: 28px;
   height: 28px;
   padding: 0 8px;
@@ -792,15 +946,16 @@ input[type="checkbox"] {
 
 .ani-key-transform-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px;
+  grid-area: head;
+  grid-template-columns: minmax(0, 1fr) 128px;
   align-items: center;
-  gap: 8px;
-  padding-right: 34px;
+  gap: 6px;
+  padding-right: 0;
 }
 
 .ani-key-transform-head label {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
 }
@@ -863,9 +1018,51 @@ input[type="checkbox"] {
   font-weight: 900;
 }
 
+.ani-track-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 32px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 12px;
+}
+
+.ani-track-dialog::backdrop {
+  background: rgb(0 0 0 / 46%);
+}
+
+.ani-track-dialog form {
+  display: grid;
+  gap: 10px;
+}
+
+.ani-track-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ani-track-dialog-head button {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.ani-track-choice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
 .ani-transform-editor {
   display: grid;
+  grid-area: editor;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+  min-width: 0;
 }
 
 .ani-transform-block {
@@ -887,7 +1084,7 @@ input[type="checkbox"] {
 }
 
 .ani-transform-row {
-  grid-template-columns: 34px minmax(0, 1fr) 72px;
+  grid-template-columns: 28px minmax(76px, 1fr) 76px;
 }
 
 .ani-transform-axes input[type="number"] {

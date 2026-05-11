@@ -27,12 +27,13 @@
               <button type="button" data-language="es">ES</button>
             </div>
           </div>
-          <div class="version-text">Build 2026.05.11.0347</div>
+          <div class="version-text">Build 2026.05.11.0843</div>
           <div class="contact-text">交流QQ群: 1094233945</div>
         </div>
         <div id="highlightInfo" class="highlight-info" hidden></div>
         <div id="meshNameOverlay" class="mesh-name-overlay" hidden></div>
         <div id="aniTimelinePanel" class="ani-timeline-panel" hidden>
+          <div id="aniTimelineResizeHandle" class="ani-timeline-resize-handle" aria-hidden="true"></div>
           <div class="ani-timeline-head">
             <label><input id="autoPlay" type="checkbox" checked /> <span data-i18n="autoPlay">Auto play</span></label>
             <span id="frameLabel">0 / 0</span>
@@ -44,36 +45,47 @@
             <div class="ani-timeline-actions">
               <label class="switch-row"><input id="aniSnapKeys" type="checkbox" checked /> <span data-i18n="snapKeys">Snap</span></label>
               <input id="aniSnapStep" type="number" value="1.0" min="0.0001" step="0.01" />
-              <button id="aniAddKey" type="button" data-i18n="addKey">Add key</button>
             </div>
           </div>
-          <input id="aniTimeSlider" class="ani-time-slider" type="range" min="0" max="1" value="0" step="0.01" />
+          <div class="ani-slider-row">
+            <button id="aniSelectTracks" type="button" data-i18n="selectTracks">Select tracks</button>
+            <div id="aniSliderTrack" class="ani-slider-track" role="slider" aria-label="Animation time" tabindex="0">
+              <span id="aniSliderThumb" class="ani-slider-thumb"></span>
+            </div>
+            <input id="aniTimeSlider" class="ani-time-slider" type="range" min="0" max="1" value="0" step="0.01" />
+          </div>
           <div id="aniTimeline" class="ani-timeline" role="slider" aria-label="Animation timeline">
+            <div id="aniSnapLayer" class="ani-snap-layer"></div>
             <div id="aniTimelineProgress" class="ani-timeline-progress"></div>
             <span id="aniTimelineCursor" class="ani-timeline-cursor"></span>
             <div id="aniKeyLayer" class="ani-key-layer"></div>
           </div>
           <div id="aniKeyEditor" class="ani-key-editor">
-            <button id="aniCloseKeyEditor" class="icon-button ani-key-close" type="button" aria-label="Close">×</button>
-            <div class="ani-key-parts">
-              <div class="ani-key-nav">
-                <button id="aniPrevKey" type="button">&lt;</button>
-                <input id="aniKeyInterval" type="number" value="1" step="0.01" min="0.0001" />
-                <button id="aniInsertKeyAfter" type="button" data-i18n="add">Add</button>
-                <button id="aniNextKey" type="button">&gt;</button>
-              </div>
-              <button id="aniDeleteKey" class="ani-delete-key-row" type="button" data-i18n="delete">Delete</button>
-              <div class="ani-editor-title" data-i18n="keyParts">Key parts</div>
-              <div id="aniKeyPartList" class="ani-key-part-list"></div>
-            </div>
             <div class="ani-key-transform">
               <div class="ani-key-transform-head">
                 <div class="ani-editor-title" id="aniKeyTransformTitle">-</div>
                 <label><span data-i18n="time">Time</span><input id="aniKeyTimeInput" type="number" step="0.01" /></label>
               </div>
+              <div class="ani-key-nav">
+                <button id="aniPrevKey" type="button">&lt;</button>
+                <input id="aniKeyInterval" type="number" value="1" step="0.01" min="0.0001" />
+                <button id="aniInsertKeyAfter" type="button" data-i18n="add">Add</button>
+                <button id="aniNextKey" type="button">&gt;</button>
+                <button id="aniDeleteKey" class="ani-delete-key-row" type="button" data-i18n="delete">Delete</button>
+                <button id="aniCloseKeyEditor" class="icon-button ani-key-close" type="button" aria-label="Close">×</button>
+              </div>
               <div id="aniTransformEditor" class="ani-transform-editor"></div>
             </div>
           </div>
+          <dialog id="aniTrackDialog" class="ani-track-dialog">
+            <form method="dialog">
+              <div class="ani-track-dialog-head">
+                <strong data-i18n="selectTracks">Select tracks</strong>
+                <button type="submit" aria-label="Close">×</button>
+              </div>
+              <div id="aniTrackList" class="ani-key-part-list"></div>
+            </form>
+          </dialog>
         </div>
       </section>
       <div id="panelResizer" class="panel-resizer" aria-label="Resize panel"></div>
