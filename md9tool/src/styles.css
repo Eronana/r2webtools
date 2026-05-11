@@ -978,6 +978,28 @@ input[type="checkbox"] {
   gap: 8px;
 }
 
+.track-bin-info {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.track-bin-edit-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.track-bin-info label {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
 .inline-field {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);

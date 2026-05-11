@@ -71,6 +71,8 @@ const el = {
   showMeshNames: document.querySelector("#showMeshNames"),
   targetModelHeight: document.querySelector("#targetModelHeight"),
   scaleModelHeight: document.querySelector("#scaleModelHeight"),
+  modelScaleFactor: document.querySelector("#modelScaleFactor"),
+  scaleModelFactor: document.querySelector("#scaleModelFactor"),
   resetModelPosition: document.querySelector("#resetModelPosition"),
   undoEdit: document.querySelector("#undoEdit"),
   redoEdit: document.querySelector("#redoEdit"),
@@ -97,8 +99,12 @@ const el = {
   deletePart: document.querySelector("#deletePart"),
   editName: document.querySelector("#editName"),
   editMaterial: document.querySelector("#editMaterial"),
+  editParentLabel: document.querySelector("#editParentLabel"),
+  editParentControl: document.querySelector("#editParentControl"),
   editParent: document.querySelector("#editParent"),
   keepWorldOnParentChange: document.querySelector("#keepWorldOnParentChange"),
+  trackBinInfo: document.querySelector("#trackBinInfo"),
+  matrixModeControl: document.querySelector("#matrixModeControl"),
   matrixMode: document.querySelector("#matrixMode"),
   transformEditor: document.querySelector("#transformEditor"),
   replaceMeshInput: document.querySelector("#replaceMeshInput"),
@@ -125,6 +131,7 @@ el.viewerCanvas.append(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
+controls.enableRotate = false;
 controls.target.set(0, 45, 0);
 
 const raycaster = new THREE.Raycaster();
@@ -152,12 +159,16 @@ const ANIMATION_FPS = 90;
 // 0xffffff white, neutral but weaker on pale textures.
 const PART_HIGHLIGHT_COLOR = 0xff6aa8;
 const PART_PICK_DRAG_THRESHOLD = 4;
+const POINTER_LOCK_ROTATE_SPEED = 0.005;
 const DDS_BLOCK_SIZE = 4;
 const DDS_SAFE_UPSCALE_LIMIT = 128;
 const DDS_PALETTE_UPSCALE_MAX_PIXELS = 65536;
 const DDS_PALETTE_UNIQUE_COLOR_LIMIT = 256;
 const DDS_SAFE_UPSCALE_FACTOR = 4;
 const TEXTURE_FILE_PATTERN = /\.(dds|png|jpe?g|webp|bmp|gif|avif|tga)$/i;
+const TRACK_BIN_FORMAT = "track-bin";
+const MD9_FORMAT = "md9";
+const TRACK_BIN_RANGE_SENTINEL = 0xcccccc00;
 const SQUISH_DXT3 = 1 << 1;
 const SQUISH_COLOUR_METRIC_UNIFORM = 1 << 6;
 const SQUISH_WEIGHT_COLOUR_BY_ALPHA = 1 << 7;
@@ -172,7 +183,7 @@ const I18N = {
     saveMd9: "Save",
     saveAni: "Save",
     currentModel: "Current model",
-    noMd9Loaded: "No MD9 loaded",
+    noMd9Loaded: "No model loaded",
     clear: "Clear",
     currentAnimation: "Current animation",
     defaultPose: "Default pose",
@@ -189,6 +200,8 @@ const I18N = {
     globalOptions: "Global options",
     targetHeight: "Target height",
     scaleToHeight: "Scale",
+    scaleFactor: "Reference scale",
+    applyScale: "Apply",
     resetPosition: "Reset position",
     undo: "Undo",
     redo: "Redo",
@@ -251,11 +264,13 @@ const I18N = {
     keepWorldPosition: "Keep position",
     transform: "Transform",
     matrixMode: "Matrix",
+    trackBinDetails: "Section {section}, angle {angle} deg, index {index}",
+    trackBinFlags: "Vertex start {vertexStart}",
     replaceModel: "Replace model",
     replaceKeepSize: "Keep size",
     replaceHint: "Drop obj/mtl or glb/gltf/bin with textures here",
-    chooseMd9: "Choose an MD9 file",
-    dropOverlay: "Drop md9 / ani / obj / glb / gltf / texture files",
+    chooseMd9: "Choose an MD9 or track bin file",
+    dropOverlay: "Drop md9 / bin / ani / obj / glb / gltf / texture files",
     helpTitle: "Help",
     loading: "Loading...",
     edit: "Edit",
@@ -273,6 +288,7 @@ const I18N = {
     selectPartFirst: "Select a part first",
     invalidHeight: "Enter a valid target height",
     scaledModelHeight: "Scaled model height to {height}",
+    scaledModelFactor: "Reference scale set to {factor}",
     resetModelPositionDone: "Reset model position",
     undoDone: "Undone",
     redoDone: "Redone",
@@ -285,7 +301,7 @@ const I18N = {
     replacedPart: "Replaced part {name}{mtl}",
     readMtl: ", read MTL",
     addedTextures: "Added {count} texture files",
-    noSupportedFiles: "No usable md9, ani, or texture files",
+    noSupportedFiles: "No usable model, ani, or texture files",
     loadingModel: "Loading {name}",
     loadFailed: "Load failed: {name}",
     switchedDefaultPose: "Switched to default pose",
@@ -293,6 +309,8 @@ const I18N = {
     animationLoadFailed: "Animation load failed: {name}",
     modelLoaded: "Loaded {name}",
     md9CountMismatch: "MD9 vertex or index count mismatch",
+    trackBinLengthMismatch: "Track bin length mismatch",
+    trackBinCountMismatch: "Track bin index counts are inconsistent",
     aniLengthMismatch: "ANI data length mismatch",
     modelsCleared: "Models cleared",
     animationsCleared: "Animations cleared",
@@ -303,7 +321,7 @@ const I18N = {
     savedMd9: "Saved {name}",
     saveFailed: "Save failed: {message}",
     pngEncodeFailed: "PNG atlas encoding failed",
-    textureNamePrompt: "Enter the DDS texture filename to write into the MD9",
+    textureNamePrompt: "Enter the DDS texture filename to write into the model",
     modelNamePrompt: "Enter the model filename",
     cannotReadTexture: "Cannot read replacement texture",
     ddsPngUnsupported: "PNG atlas saving cannot re-encode DDS in this version. Use png/jpg/webp for replacement mesh textures.",
@@ -315,7 +333,7 @@ const I18N = {
     saveMd9: "保存",
     saveAni: "保存",
     currentModel: "当前模型",
-    noMd9Loaded: "尚未加载 md9",
+    noMd9Loaded: "尚未加载模型",
     clear: "清空",
     currentAnimation: "当前动画",
     defaultPose: "默认姿势",
@@ -332,6 +350,8 @@ const I18N = {
     globalOptions: "全局选项",
     targetHeight: "目标高度",
     scaleToHeight: "缩放",
+    scaleFactor: "参考比例",
+    applyScale: "应用",
     resetPosition: "重置位置",
     undo: "撤销",
     redo: "重做",
@@ -394,11 +414,13 @@ const I18N = {
     keepWorldPosition: "保持位置",
     transform: "变换",
     matrixMode: "矩阵",
+    trackBinDetails: "Section {section}，角度 {angle}°，Index {index}",
+    trackBinFlags: "顶点起点 {vertexStart}",
     replaceModel: "替换模型",
     replaceKeepSize: "保持大小",
     replaceHint: "可把 obj/mtl 或 glb/gltf/bin 和贴图一起拖入页面",
-    chooseMd9: "选择一个 md9 文件",
-    dropOverlay: "拖入 md9 / ani / obj / glb / gltf / 贴图文件",
+    chooseMd9: "选择一个 MD9 或赛道 bin 文件",
+    dropOverlay: "拖入 md9 / bin / ani / obj / glb / gltf / 贴图文件",
     helpTitle: "使用说明",
     loading: "加载中...",
     edit: "编辑",
@@ -416,6 +438,7 @@ const I18N = {
     selectPartFirst: "请先选择一个部件",
     invalidHeight: "请输入有效的目标高度",
     scaledModelHeight: "已将模型高度缩放到 {height}",
+    scaledModelFactor: "参考比例已设为 {factor}",
     resetModelPositionDone: "已重置模型位置",
     undoDone: "已撤销",
     redoDone: "已重做",
@@ -428,7 +451,7 @@ const I18N = {
     replacedPart: "已替换部件 {name}{mtl}",
     readMtl: "，已读取 MTL",
     addedTextures: "已加入 {count} 个贴图文件",
-    noSupportedFiles: "没有可用的 md9、ani 或贴图文件",
+    noSupportedFiles: "没有可用的模型、ani 或贴图文件",
     loadingModel: "加载 {name}",
     loadFailed: "加载失败: {name}",
     switchedDefaultPose: "已切换到默认姿势",
@@ -436,6 +459,8 @@ const I18N = {
     animationLoadFailed: "动画加载失败: {name}",
     modelLoaded: "已加载 {name}",
     md9CountMismatch: "MD9 顶点或索引计数不一致",
+    trackBinLengthMismatch: "Track bin 文件长度不匹配",
+    trackBinCountMismatch: "Track bin index 计数不一致",
     aniLengthMismatch: "ANI 数据长度不匹配",
     modelsCleared: "已清空模型",
     animationsCleared: "已清空动画",
@@ -446,7 +471,7 @@ const I18N = {
     savedMd9: "已保存 {name}",
     saveFailed: "保存失败: {message}",
     pngEncodeFailed: "PNG atlas 编码失败",
-    textureNamePrompt: "请输入写入 MD9 的 DDS 贴图文件名",
+    textureNamePrompt: "请输入写入模型的 DDS 贴图文件名",
     modelNamePrompt: "请输入模型文件名",
     cannotReadTexture: "无法读取替换贴图",
     ddsPngUnsupported: "第一版保存 PNG atlas 不支持把 DDS 重新编码进 PNG，请为替换 mesh 使用 png/jpg/webp 贴图",
@@ -458,7 +483,7 @@ const I18N = {
     saveMd9: "Guardar",
     saveAni: "Guardar",
     currentModel: "Modelo actual",
-    noMd9Loaded: "No hay MD9 cargado",
+    noMd9Loaded: "No hay modelo cargado",
     clear: "Limpiar",
     currentAnimation: "Animacion actual",
     defaultPose: "Pose predeterminada",
@@ -475,6 +500,8 @@ const I18N = {
     globalOptions: "Opciones globales",
     targetHeight: "Altura obj.",
     scaleToHeight: "Escalar",
+    scaleFactor: "Escala de referencia",
+    applyScale: "Aplicar",
     resetPosition: "Restablecer pos.",
     undo: "Deshacer",
     redo: "Rehacer",
@@ -537,11 +564,13 @@ const I18N = {
     keepWorldPosition: "Mantener pos.",
     transform: "Transformacion",
     matrixMode: "Matriz",
+    trackBinDetails: "Section {section}, angulo {angle} deg, index {index}",
+    trackBinFlags: "Inicio vert. {vertexStart}",
     replaceModel: "Reemplazar modelo",
     replaceKeepSize: "Mantener tamano",
     replaceHint: "Suelta obj/mtl o glb/gltf/bin con texturas aqui",
-    chooseMd9: "Elige un archivo MD9",
-    dropOverlay: "Suelta archivos md9 / ani / obj / glb / gltf / texturas",
+    chooseMd9: "Elige un archivo MD9 o bin de pista",
+    dropOverlay: "Suelta archivos md9 / bin / ani / obj / glb / gltf / texturas",
     helpTitle: "Ayuda",
     loading: "Cargando...",
     edit: "Editar",
@@ -559,6 +588,7 @@ const I18N = {
     selectPartFirst: "Selecciona una parte primero",
     invalidHeight: "Introduce una altura valida",
     scaledModelHeight: "Modelo escalado a altura {height}",
+    scaledModelFactor: "Escala de referencia: {factor}",
     resetModelPositionDone: "Posicion del modelo restablecida",
     undoDone: "Deshecho",
     redoDone: "Rehecho",
@@ -571,7 +601,7 @@ const I18N = {
     replacedPart: "Parte reemplazada {name}{mtl}",
     readMtl: ", MTL leido",
     addedTextures: "Se agregaron {count} texturas",
-    noSupportedFiles: "No hay archivos md9, ani o texturas utilizables",
+    noSupportedFiles: "No hay modelos, ani o texturas utilizables",
     loadingModel: "Cargando {name}",
     loadFailed: "Fallo la carga: {name}",
     switchedDefaultPose: "Cambiado a pose predeterminada",
@@ -579,6 +609,8 @@ const I18N = {
     animationLoadFailed: "Fallo al cargar animacion: {name}",
     modelLoaded: "Cargado {name}",
     md9CountMismatch: "Conteo de vertices o indices MD9 inconsistente",
+    trackBinLengthMismatch: "Longitud de track bin no coincide",
+    trackBinCountMismatch: "Conteos de index en track bin inconsistentes",
     aniLengthMismatch: "Longitud de datos ANI no coincide",
     modelsCleared: "Modelos limpiados",
     animationsCleared: "Animaciones limpiadas",
@@ -589,7 +621,7 @@ const I18N = {
     savedMd9: "Guardado {name}",
     saveFailed: "Error al guardar: {message}",
     pngEncodeFailed: "Error al codificar PNG atlas",
-    textureNamePrompt: "Introduce el nombre DDS para escribir en MD9",
+    textureNamePrompt: "Introduce el nombre DDS para escribir en el modelo",
     modelNamePrompt: "Introduce el nombre del modelo",
     cannotReadTexture: "No se puede leer la textura de reemplazo",
     ddsPngUnsupported: "Esta version no puede recodificar DDS en el atlas PNG. Usa png/jpg/webp para texturas de reemplazo.",
@@ -632,6 +664,14 @@ const state = {
   highlightedHelper: null,
   meshNameLabels: [],
   cameraKeys: new Set(),
+  cameraDragPointerId: null,
+  cameraDragStart: new THREE.Vector2(),
+  cameraPointerLocked: false,
+  cameraPointerMoved: false,
+  cameraOrbitYaw: 0,
+  cameraOrbitPitch: 0,
+  cameraOrbitDistance: 1,
+  cameraOrbitInitialized: false,
   lastFrameTime: performance.now(),
   textureFiles: new Map(),
   objectUrls: [],
@@ -683,6 +723,7 @@ el.clearAnimations.addEventListener("click", clearAnimations);
 el.saveModel.addEventListener("click", saveCurrentModel);
 el.saveAnimation.addEventListener("click", saveCurrentAnimation);
 el.scaleModelHeight.addEventListener("click", scaleCurrentModelToHeight);
+el.scaleModelFactor.addEventListener("click", scaleCurrentModelByFactor);
 el.resetModelPosition.addEventListener("click", resetCurrentModelPosition);
 el.undoEdit.addEventListener("click", undoEdit);
 el.redoEdit.addEventListener("click", redoEdit);
@@ -761,6 +802,8 @@ el.editorBlock.addEventListener("input", (event) => {
     applyEditorValues();
   }
 });
+el.trackBinInfo.addEventListener("input", handleTrackBinInfoInput);
+el.trackBinInfo.addEventListener("change", handleTrackBinInfoInput);
 el.batchEditPanel.addEventListener("input", (event) => {
   if (event.target.matches("[data-transform]")) {
     syncBatchTransformInputPair(event.target);
@@ -854,27 +897,30 @@ async function addFiles(files) {
     for (const file of pakFiles) expanded.push(...(await unpackPakFile(file)));
     files = [...files.filter((file) => !/\.(zip|pak)$/i.test(file.name)), ...expanded];
   }
-  const md9Files = files.filter((file) => file.name.toLowerCase().endsWith(".md9"));
+  const sceneModelFiles = files.filter((file) => isReplacementModelFile(file.name));
+  const md9ModelFiles = files.filter((file) => file.name.toLowerCase().endsWith(".md9"));
+  const binModelFiles = sceneModelFiles.length ? [] : files.filter((file) => file.name.toLowerCase().endsWith(".bin"));
+  const modelFiles = [...md9ModelFiles, ...binModelFiles];
   const aniFiles = files.filter((file) => file.name.toLowerCase().endsWith(".ani"));
   const textureFiles = files.filter((file) => isTextureFile(file.name));
-  const replacementModelFiles = files.filter((file) => isReplacementModelFile(file.name));
+  const replacementModelFiles = sceneModelFiles;
 
-  if (!md9Files.length && !aniFiles.length && replacementModelFiles.length && state.editIndex >= 0) {
+  if (!modelFiles.length && !aniFiles.length && replacementModelFiles.length && state.editIndex >= 0) {
     await replaceEditedPartFromFiles(files);
     return;
   }
 
-  for (const file of md9Files) addMd9File(file);
+  for (const file of modelFiles) addMd9File(file);
   for (const file of aniFiles) addAniFile(file);
   for (const file of textureFiles) {
     state.textureFiles.set(textureKey(file.webkitRelativePath || file.name), file);
   }
 
-  if (md9Files.length > 0 || aniFiles.length > 0) {
+  if (modelFiles.length > 0 || aniFiles.length > 0) {
     updateModelSelect();
     updateAnimationSelect();
-    if (md9Files.length > 0) {
-      await loadSelectedModel(fileKey(md9Files[0]));
+    if (modelFiles.length > 0) {
+      await loadSelectedModel(fileKey(modelFiles[0]));
     }
     if (aniFiles.length > 0) {
       await loadSelectedAnimation(fileKey(aniFiles[0]));
@@ -929,6 +975,7 @@ function resetOpenedFiles() {
   el.saveModel.disabled = true;
   el.saveAnimation.disabled = true;
   el.scaleModelHeight.disabled = true;
+  el.scaleModelFactor.disabled = true;
   el.resetModelPosition.disabled = true;
   el.partFilter.disabled = true;
   el.partFilter.value = "";
@@ -940,6 +987,8 @@ function resetOpenedFiles() {
   el.batchEditToggle.disabled = true;
   populateEditorForNoSelection();
   setEditorEnabled(false);
+  updateModelFormatUi();
+  updateReferenceScale();
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
   el.submeshList.replaceChildren();
@@ -956,13 +1005,18 @@ function addMd9File(file) {
   const item = {
     id,
     file,
-    label: file.webkitRelativePath || file.name
+    label: file.webkitRelativePath || file.name,
+    format: getModelFileFormat(file.name)
   };
   if (existingIndex >= 0) {
     state.md9Files[existingIndex] = item;
     return;
   }
   state.md9Files.push(item);
+}
+
+function getModelFileFormat(name) {
+  return String(name || "").toLowerCase().endsWith(".bin") ? TRACK_BIN_FORMAT : MD9_FORMAT;
 }
 
 function addAniFile(file) {
@@ -987,16 +1041,28 @@ async function loadSelectedModel(id) {
   el.modelSelect.value = id;
   setStatus(t("loadingModel", { name: item.label }));
   try {
-    const model = item.model || parseMd9(await item.file.arrayBuffer(), item.label, "");
+    const model = item.model || parseModelBuffer(await item.file.arrayBuffer(), item.label, "", item.format);
+    item.model = model;
     await showModel(model, item.label);
-    if (state.currentAnimation) applyAnimation(0);
+    if (state.currentAnimation && !isTrackBinModel(model)) applyAnimation(0);
   } catch (error) {
     console.error(error);
     setStatus(t("loadFailed", { name: item.label }));
   }
 }
 
+function parseModelBuffer(buffer, name, baseDir, format = getModelFileFormat(name)) {
+  if (format === TRACK_BIN_FORMAT) return parseTrackBin(buffer, name, baseDir);
+  return parseMd9(buffer, name, baseDir);
+}
+
 async function loadSelectedAnimation(id) {
+  if (isTrackBinModel()) {
+    clearActiveAnimationForStaticModel();
+    updateAnimationSelect();
+    updateFrameControls();
+    return;
+  }
   if (!id) {
     state.currentAnimation = null;
     state.currentAniId = "";
@@ -1036,6 +1102,7 @@ async function loadSelectedAnimation(id) {
 async function showModel(model, label) {
   disposeCurrent();
   state.currentModel = model;
+  if (isTrackBinModel(model)) clearActiveAnimationForStaticModel();
   state.editIndex = -1;
   state.highlightedPartIndex = -1;
   state.batchSelectedParts = new Set();
@@ -1045,6 +1112,7 @@ async function showModel(model, label) {
   }
   el.saveModel.disabled = false;
   el.scaleModelHeight.disabled = false;
+  el.scaleModelFactor.disabled = false;
   el.resetModelPosition.disabled = false;
   el.partFilter.disabled = false;
   el.addPart.disabled = false;
@@ -1052,6 +1120,8 @@ async function showModel(model, label) {
   el.deletePart.disabled = true;
   populateEditorForNoSelection();
   setEditorEnabled(false);
+  updateModelFormatUi();
+  updateReferenceScale();
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
   updateHistoryButtons();
@@ -1071,17 +1141,27 @@ async function showModel(model, label) {
     geometry.setIndex(new THREE.Uint16BufferAttribute(part.indices, 1));
     geometry.computeBoundingSphere();
 
-    const mesh = new THREE.Mesh(geometry, materials[part.materialId] || materials[0]);
+    const baseMaterial = materials[part.materialId] || materials[0];
+    const meshMaterial = isTrackBinModel(model) && baseMaterial
+      ? cloneRenderableMaterial(baseMaterial)
+      : baseMaterial;
+    if (isTrackBinModel(model) && meshMaterial) {
+      meshMaterial.side = part.trackCullFlag === 0 ? THREE.DoubleSide : THREE.FrontSide;
+      meshMaterial.transparent = meshMaterial.transparent || part.trackAlphaFlag === 1;
+      meshMaterial.alphaTest = part.trackAlphaFlag === 1 ? Math.max(meshMaterial.alphaTest || 0, 0.1) : meshMaterial.alphaTest;
+    }
+    const mesh = new THREE.Mesh(geometry, meshMaterial);
     mesh.name = part.name;
     mesh.userData.part = part;
     const boneNode = state.boneNodes.get(part.name) || state.root;
     boneNode.add(mesh);
     state.meshEntries.push({ mesh, material: mesh.material, part });
+    if (isTrackBinModel(model)) syncTrackPartMeshTransform(state.meshEntries.length - 1);
   }
 
   rebuildNormalVisualizers();
-  state.skeletonLines = createSkeletonLines(model);
-  state.root.add(state.skeletonLines);
+  state.skeletonLines = isTrackBinModel(model) ? null : createSkeletonLines(model);
+  if (state.skeletonLines) state.root.add(state.skeletonLines);
 
   state.bounds = new THREE.Box3Helper(model.bounds, 0xe5b85b);
   state.root.add(state.bounds);
@@ -1089,11 +1169,28 @@ async function showModel(model, label) {
   rebuildMeshNameLabels();
   populateSubmeshList(model);
   updateStats(model, label);
+  updateAnimationSelect();
+  updateFrameControls();
+  updateReferenceScale();
   frameModel(model.bounds);
   applyOptions();
   updateHighlightInfo();
   updateMissingTextures(model);
   setStatus(t("modelLoaded", { name: label }));
+}
+
+function isTrackBinModel(model = state.currentModel) {
+  return model?.format === TRACK_BIN_FORMAT;
+}
+
+function clearActiveAnimationForStaticModel() {
+  state.currentAnimation = null;
+  state.currentAniId = "";
+  state.animationFrame = 0;
+  state.aniRangeStart = 0;
+  state.aniRangeEnd = 0;
+  state.selectedAniKeyTime = null;
+  state.selectedAniPartName = "";
 }
 
 function parseMd9(buffer, name, baseDir) {
@@ -1239,9 +1336,197 @@ function parseMd9(buffer, name, baseDir) {
     throw new Error(t("md9CountMismatch"));
   }
 
-  const model = { name, baseDir, newFormat, materials, submeshes, totalVertices, totalFaces, bounds };
+  const model = { name, baseDir, format: MD9_FORMAT, newFormat, materials, submeshes, totalVertices, totalFaces, bounds, transformSliderScale: 1 };
   captureInitialModelState(model);
   return model;
+}
+
+function parseTrackBin(buffer, name, baseDir) {
+  const view = new DataView(buffer);
+  let offset = 0;
+  const readInt = () => {
+    const value = view.getInt32(offset, true);
+    offset += 4;
+    return value;
+  };
+  const readUint16 = () => {
+    const value = view.getUint16(offset, true);
+    offset += 2;
+    return value;
+  };
+  const readFloat = () => {
+    const value = view.getFloat32(offset, true);
+    offset += 4;
+    return value;
+  };
+  const readTrackTextureName = (length = 64) => {
+    const bytes = new Uint8Array(buffer, offset, length);
+    const rawBytes = Array.from(bytes);
+    offset += length;
+    let text = "";
+    for (const byte of bytes) {
+      if (byte === 0 || byte === 0xcc) break;
+      if (byte >= 32 && byte < 127) text += String.fromCharCode(byte);
+    }
+    return { textureName: text.trim(), rawBytes };
+  };
+
+  const materialCount = readInt();
+  const materials = [];
+  for (let i = 0; i < materialCount; i++) {
+    const diffuse = [readFloat(), readFloat(), readFloat(), readFloat()];
+    const ambient = [readFloat(), readFloat(), readFloat(), readFloat()];
+    const specular = [readFloat(), readFloat(), readFloat(), readFloat()];
+    const emissive = [readFloat(), readFloat(), readFloat(), readFloat()];
+    const power = readFloat();
+    const texture = readTrackTextureName(64);
+    materials.push({
+      diffuse,
+      ambient,
+      specular,
+      emissive,
+      power,
+      textureName: texture.textureName,
+      trackTextureBytes: texture.rawBytes
+    });
+  }
+
+  const sectionCount = readInt();
+  const sections = [];
+  const submeshes = [];
+  const bounds = new THREE.Box3();
+  const identity = new THREE.Matrix4().identity().toArray();
+  let totalVertices = 0;
+  let totalFaces = 0;
+
+  for (let sectionIndex = 0; sectionIndex < sectionCount; sectionIndex++) {
+    const angleRadians = readFloat();
+    const vertexCount = readInt();
+    const faceCount = readInt();
+    totalVertices += vertexCount;
+    totalFaces += faceCount;
+
+    const vertices = [];
+    for (let i = 0; i < vertexCount; i++) {
+      vertices.push({
+        position: [readFloat(), readFloat(), -readFloat()],
+        normal: [readFloat(), readFloat(), -readFloat()],
+        uv: [readFloat(), readFloat()]
+      });
+    }
+
+    const allIndices = new Uint16Array(faceCount * 3);
+    for (let i = 0; i < allIndices.length; i++) allIndices[i] = readUint16();
+
+    const trackIndexCount = readInt();
+    const trackIndices = [];
+    let faceCursor = 0;
+    let expectedVertexStart = 0;
+    for (let trackIndex = 0; trackIndex < trackIndexCount; trackIndex++) {
+      const materialId = readInt();
+      const trackVertexCount = readInt();
+      const trackFaceCount = readInt();
+      const vertexStart = readInt();
+      const alphaFlag = readInt();
+      const cullFlag = readInt();
+      const sentinel = readInt();
+      if (vertexStart !== expectedVertexStart) throw new Error(t("trackBinCountMismatch"));
+
+      const positions = new Float32Array(trackVertexCount * 3);
+      const normals = new Float32Array(trackVertexCount * 3);
+      const uvs = new Float32Array(trackVertexCount * 2);
+      for (let v = 0; v < trackVertexCount; v++) {
+        const source = vertices[vertexStart + v];
+        if (!source) throw new Error(t("trackBinCountMismatch"));
+        positions[v * 3] = source.position[0];
+        positions[v * 3 + 1] = source.position[1];
+        positions[v * 3 + 2] = source.position[2];
+        normals[v * 3] = source.normal[0];
+        normals[v * 3 + 1] = source.normal[1];
+        normals[v * 3 + 2] = source.normal[2];
+        uvs[v * 2] = source.uv[0];
+        uvs[v * 2 + 1] = source.uv[1];
+        bounds.expandByPoint(new THREE.Vector3(source.position[0], source.position[1], source.position[2]));
+      }
+
+      const indices = new Uint16Array(trackFaceCount * 3);
+      for (let i = 0; i < indices.length; i++) {
+        const index = allIndices[faceCursor * 3 + i];
+        if (index < vertexStart || index >= vertexStart + trackVertexCount) throw new Error(t("trackBinCountMismatch"));
+        indices[i] = index - vertexStart;
+      }
+
+      const partBox = computeArrayBox(positions);
+      const part = {
+        name: makeTrackPartName(sectionIndex, trackIndex),
+        matrix: [...identity],
+        boundingBox: boxToTrackBoundingArray(partBox),
+        positions,
+        localPositions: positions,
+        normals,
+        uvs,
+        indices,
+        materialId,
+        parentId: -1,
+        bonePosition: new THREE.Vector3(),
+        worldBonePosition: new THREE.Vector3(),
+        vertexCount: trackVertexCount,
+        faceCount: trackFaceCount,
+        trackSectionId: sectionIndex,
+        trackIndexId: trackIndex,
+        trackAngleRadians: angleRadians,
+        trackVertexStart: vertexStart,
+        trackAlphaFlag: alphaFlag,
+        trackCullFlag: cullFlag,
+        trackSentinel: sentinel
+      };
+      submeshes.push(part);
+      trackIndices.push(part);
+      faceCursor += trackFaceCount;
+      expectedVertexStart += trackVertexCount;
+    }
+    if (faceCursor !== faceCount || expectedVertexStart !== vertexCount) throw new Error(t("trackBinCountMismatch"));
+    sections.push({ angleRadians, vertexCount, faceCount, trackIndexCount, trackIndices });
+  }
+
+  if (offset !== buffer.byteLength) throw new Error(t("trackBinLengthMismatch"));
+  if (bounds.isEmpty()) bounds.set(new THREE.Vector3(), new THREE.Vector3());
+  const model = {
+    name,
+    baseDir,
+    format: TRACK_BIN_FORMAT,
+    materials,
+    submeshes,
+    totalVertices,
+    totalFaces,
+    bounds,
+    trackSections: sections,
+    transformSliderScale: 1
+  };
+  captureInitialModelState(model);
+  return model;
+}
+
+function boxToTrackBoundingArray(box) {
+  if (!box || box.isEmpty()) return [0, 0, 0, 0, 0, 0];
+  return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+}
+
+function makeTrackPartName(sectionId, trackIndexId) {
+  return `section${String(Math.max(0, sectionId | 0)).padStart(2, "0")}_${String(Math.max(0, trackIndexId | 0)).padStart(2, "0")}`;
+}
+
+function getNextTrackIndexId(sectionId, excludePart = null) {
+  const model = state.currentModel;
+  if (!model) return 0;
+  let maxIndex = -1;
+  for (const part of model.submeshes) {
+    if (part === excludePart) continue;
+    if (part.trackSectionId === sectionId && Number.isFinite(part.trackIndexId)) {
+      maxIndex = Math.max(maxIndex, part.trackIndexId);
+    }
+  }
+  return maxIndex + 1;
 }
 
 function captureInitialModelState(model) {
@@ -1252,9 +1537,9 @@ function captureInitialModelState(model) {
 }
 
 function clonePartState(part) {
-  return {
+  const clone = {
     name: part.name,
-    matrix: [...part.matrix],
+    matrix: part.matrix ? [...part.matrix] : new THREE.Matrix4().identity().toArray(),
     boundingBox: [...part.boundingBox],
     localPositions: new Float32Array(part.localPositions),
     normals: new Float32Array(part.normals),
@@ -1265,15 +1550,39 @@ function clonePartState(part) {
     vertexCount: part.vertexCount,
     faceCount: part.faceCount
   };
+  copyTrackPartMetadata(part, clone);
+  return clone;
+}
+
+function copyTrackPartMetadata(source, target) {
+  for (const key of [
+    "trackSectionId",
+    "trackIndexId",
+    "trackAngleRadians",
+    "trackVertexStart",
+    "trackAlphaFlag",
+    "trackCullFlag",
+    "trackSentinel"
+  ]) {
+    if (source[key] !== undefined) target[key] = source[key];
+  }
 }
 
 function cloneModelSnapshot(model) {
   return {
     name: model.name,
     baseDir: model.baseDir,
+    format: model.format,
     newFormat: model.newFormat,
+    transformSliderScale: model.transformSliderScale || 1,
     materials: model.materials.map(cloneMaterialState),
     submeshes: model.submeshes.map(clonePartForSnapshot),
+    trackSections: model.trackSections?.map((section) => ({
+      angleRadians: section.angleRadians,
+      vertexCount: section.vertexCount,
+      faceCount: section.faceCount,
+      trackIndexCount: section.trackIndexCount
+    })),
     generatedAnimations: model.generatedAnimations || [],
     highlightedPartIndex: state.highlightedPartIndex,
     batchSelectedParts: [...state.batchSelectedParts]
@@ -1281,7 +1590,7 @@ function cloneModelSnapshot(model) {
 }
 
 function cloneMaterialState(material) {
-  return {
+  const clone = {
     ...material,
     diffuse: material.diffuse ? [...material.diffuse] : [1, 1, 1, 1],
     ambient: material.ambient ? [...material.ambient] : [0, 0, 0, 1],
@@ -1289,6 +1598,8 @@ function cloneMaterialState(material) {
     emissive: material.emissive ? [...material.emissive] : [0, 0, 0, 1],
     extra: material.extra ? [...material.extra] : undefined
   };
+  if (material.trackTextureBytes) clone.trackTextureBytes = [...material.trackTextureBytes];
+  return clone;
 }
 
 function clonePartForSnapshot(part) {
@@ -1332,9 +1643,12 @@ async function restoreModelSnapshot(snapshot) {
     const model = state.currentModel;
     model.name = snapshot.name;
     model.baseDir = snapshot.baseDir;
+    model.format = snapshot.format;
     model.newFormat = snapshot.newFormat;
+    model.transformSliderScale = snapshot.transformSliderScale || 1;
     model.materials = snapshot.materials.map(cloneMaterialState);
     model.submeshes = snapshot.submeshes.map(clonePartForSnapshot);
+    model.trackSections = snapshot.trackSections;
     model.generatedAnimations = snapshot.generatedAnimations || [];
     updateGeneratedModelCounts(model);
     await showModel(model, model.name);
@@ -1494,6 +1808,7 @@ async function createMaterial(material, baseDir) {
 
   if (material.atlasSourceImage) {
     const texture = new THREE.CanvasTexture(material.atlasSourceImage);
+    ensureTextureMatrix(texture);
     texture.name = material.textureName || "";
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.flipY = false;
@@ -1511,7 +1826,7 @@ async function createMaterial(material, baseDir) {
   const resolvedTexture = resolveTextureUrl(material.textureName, baseDir);
   if (resolvedTexture) {
     try {
-      const texture = await loadTexture(resolvedTexture.url, resolvedTexture.name);
+      const texture = ensureTextureMatrix(await loadTexture(resolvedTexture.url, resolvedTexture.name));
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
@@ -1546,12 +1861,18 @@ function applyTextureAlphaToMaterial(material, texture) {
   material.alphaTest = Math.max(material.alphaTest || 0, 0.01);
 }
 
+function ensureTextureMatrix(texture) {
+  if (texture?.isTexture && !texture.matrix?.elements) texture.matrix = new THREE.Matrix3();
+  return texture;
+}
+
 async function loadDdsAsCanvasTexture(url, textureName) {
   try {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const canvas = decodeDdsToCanvas(await response.arrayBuffer());
     const texture = new THREE.CanvasTexture(canvas);
+    ensureTextureMatrix(texture);
     texture.name = textureName || "";
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.flipY = false;
@@ -1832,7 +2153,9 @@ function createBoneNodes(model) {
   state.boneNodes = new Map();
   for (const part of model.submeshes) {
     const node = new THREE.Group();
-    const transform = getPartTransform(part);
+    const transform = isTrackBinModel(model)
+      ? { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) }
+      : getPartTransform(part);
     node.name = `${part.name} bone`;
     node.position.copy(transform.position);
     node.quaternion.copy(transform.quaternion);
@@ -1990,6 +2313,7 @@ function setHighlightedPart(index) {
   state.highlightedPartIndex = index;
   applyHighlightedMaterial();
   updateHighlightedRows();
+  scrollHighlightedPartIntoView(index);
   updateHighlightInfo();
   el.duplicatePart.disabled = false;
   el.deletePart.disabled = false;
@@ -2022,6 +2346,7 @@ function populateEditorForNoSelection() {
   populateEditorParentOptions(-1);
   el.keepWorldOnParentChange.checked = true;
   buildTransformEditor(createEmptyEditorPart());
+  updateModelFormatUi();
 }
 
 function createEmptyEditorPart() {
@@ -2074,7 +2399,7 @@ function restoreHighlightedMaterial() {
     if (entry?.mesh && entry.material) entry.mesh.material = entry.material;
   }
   if (state.highlightedHelper) {
-    scene.remove(state.highlightedHelper);
+    state.highlightedHelper.parent?.remove(state.highlightedHelper);
     disposeObject(state.highlightedHelper);
   }
   state.highlightedMaterial?.dispose?.();
@@ -2085,20 +2410,78 @@ function restoreHighlightedMaterial() {
 function applyHighlightedMaterial() {
   const entry = state.meshEntries[state.highlightedPartIndex];
   if (!entry?.mesh || !entry.material) return;
-  const material = entry.material.clone();
+  const material = cloneRenderableMaterial(entry.material);
   material.name = `${entry.material.name || entry.part?.name || "part"} highlight`;
   material.color = material.color?.clone?.() || new THREE.Color(0xffffff);
   material.color.lerp(new THREE.Color(PART_HIGHLIGHT_COLOR), 0.65);
   material.wireframe = el.showWireframe.checked;
-  material.map = el.showTextures.checked ? (entry.material.userData.baseMap ?? entry.material.map ?? null) : null;
+  material.map = el.showTextures.checked ? getMaterialBaseMap(entry.material) : null;
   material.needsUpdate = true;
   entry.mesh.material = material;
   state.highlightedMaterial = material;
-  state.highlightedHelper = new THREE.BoxHelper(entry.mesh, PART_HIGHLIGHT_COLOR);
+  state.highlightedHelper = isTrackBinModel()
+    ? createTrackLocalBoundingBoxHelper(entry.mesh, entry.part, PART_HIGHLIGHT_COLOR)
+    : new THREE.BoxHelper(entry.mesh, PART_HIGHLIGHT_COLOR);
   state.highlightedHelper.name = `${entry.part?.name || entry.mesh.name || "part"} highlight bounds`;
   state.highlightedHelper.renderOrder = 999;
   state.highlightedHelper.material.depthTest = false;
-  scene.add(state.highlightedHelper);
+  if (isTrackBinModel()) {
+    entry.mesh.add(state.highlightedHelper);
+  } else {
+    scene.add(state.highlightedHelper);
+  }
+}
+
+function createLocalBoundingBoxHelper(mesh, color) {
+  mesh.geometry.computeBoundingBox();
+  const box = mesh.geometry.boundingBox || new THREE.Box3();
+  return createBoxLineHelper(box, color);
+}
+
+function createTrackLocalBoundingBoxHelper(mesh, part, color) {
+  const frame = getTrackPartFrameMatrix(part);
+  const inverseFrame = frame.clone().invert();
+  const box = new THREE.Box3();
+  const position = mesh.geometry.getAttribute("position");
+  const point = new THREE.Vector3();
+  for (let index = 0; index < position.count; index++) {
+    point.fromBufferAttribute(position, index).applyMatrix4(inverseFrame);
+    box.expandByPoint(point);
+  }
+  if (box.isEmpty()) box.set(new THREE.Vector3(), new THREE.Vector3());
+  return createBoxLineHelper(box, color, frame);
+}
+
+function createBoxLineHelper(box, color, frame = null) {
+  const min = box.min;
+  const max = box.max;
+  const points = [
+    min.x, min.y, min.z, max.x, min.y, min.z,
+    max.x, min.y, min.z, max.x, max.y, min.z,
+    max.x, max.y, min.z, min.x, max.y, min.z,
+    min.x, max.y, min.z, min.x, min.y, min.z,
+    min.x, min.y, max.z, max.x, min.y, max.z,
+    max.x, min.y, max.z, max.x, max.y, max.z,
+    max.x, max.y, max.z, min.x, max.y, max.z,
+    min.x, max.y, max.z, min.x, min.y, max.z,
+    min.x, min.y, min.z, min.x, min.y, max.z,
+    max.x, min.y, min.z, max.x, min.y, max.z,
+    max.x, max.y, min.z, max.x, max.y, max.z,
+    min.x, max.y, min.z, min.x, max.y, max.z
+  ];
+  if (frame) {
+    const point = new THREE.Vector3();
+    for (let i = 0; i < points.length; i += 3) {
+      point.set(points[i], points[i + 1], points[i + 2]).applyMatrix4(frame);
+      points[i] = point.x;
+      points[i + 1] = point.y;
+      points[i + 2] = point.z;
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
+  const material = new THREE.LineBasicMaterial({ color, depthTest: false });
+  return new THREE.LineSegments(geometry, material);
 }
 
 function refreshHighlightedMaterial() {
@@ -2116,6 +2499,11 @@ function updateHighlightedRows() {
   }
 }
 
+function scrollHighlightedPartIntoView(index = state.highlightedPartIndex) {
+  const row = el.submeshList.querySelector(`[data-part-index="${index}"]`);
+  row?.scrollIntoView?.({ block: "nearest" });
+}
+
 function updateHighlightInfo() {
   const entry = state.meshEntries[state.highlightedPartIndex];
   if (!entry?.mesh || !entry.part) {
@@ -2127,10 +2515,13 @@ function updateHighlightInfo() {
   const center = box.getCenter(new THREE.Vector3());
   const material = state.currentModel?.materials?.[entry.part.materialId];
   const degree = getPartConnectionCount(state.highlightedPartIndex);
+  const detailLine = isTrackBinModel()
+    ? `Section: ${entry.part.trackSectionId ?? "-"} | Angle: ${formatNumber(THREE.MathUtils.radToDeg(entry.part.trackAngleRadians || 0))} | Index: ${entry.part.trackIndexId ?? "-"}`
+    : `ID: ${state.highlightedPartIndex} | ${t("connections")}: ${degree} | ${t("vertices")}: ${entry.part.vertexCount} | ${t("faces")}: ${entry.part.faceCount}`;
   el.highlightInfo.hidden = false;
   el.highlightInfo.innerHTML = `
     <strong>${escapeHtml(entry.part.name)}</strong>
-    <div>ID: ${state.highlightedPartIndex} | ${t("connections")}: ${degree} | ${t("vertices")}: ${entry.part.vertexCount} | ${t("faces")}: ${entry.part.faceCount}</div>
+    <div>${escapeHtml(detailLine)} | ${t("vertices")}: ${entry.part.vertexCount} | ${t("faces")}: ${entry.part.faceCount}</div>
     <div>${t("material")}: ${entry.part.materialId}${material?.textureName ? ` (${escapeHtml(material.textureName)})` : ""}</div>
     <div>Size: ${formatNumber(size.x)} / ${formatNumber(size.y)} / ${formatNumber(size.z)}</div>
     <div>Pos: ${formatNumber(center.x)} / ${formatNumber(center.y)} / ${formatNumber(center.z)}</div>
@@ -2215,6 +2606,7 @@ function openPartEditor(index) {
   state.editIndex = index;
   const part = state.currentModel.submeshes[index];
   setEditorEnabled(true);
+  updateModelFormatUi(part);
   el.editorName.textContent = part.name;
   el.editName.value = part.name;
 
@@ -2224,8 +2616,176 @@ function openPartEditor(index) {
   populateEditorParentOptions(index);
   el.editParent.value = String(part.parentId);
   el.keepWorldOnParentChange.checked = true;
+  if (isTrackBinModel()) el.matrixMode.checked = false;
 
   buildTransformEditor(part);
+}
+
+function updateModelFormatUi(part = null) {
+  const track = isTrackBinModel();
+  el.editParentLabel.hidden = track;
+  el.editParentControl.hidden = track;
+  el.matrixModeControl.hidden = track;
+  el.trackBinInfo.hidden = !track || !part;
+  el.showSkeleton.disabled = track || !state.currentModel;
+  if (track) {
+    el.showSkeleton.checked = false;
+    if (part) {
+      const sectionOptions = buildTrackSectionOptions(part.trackSectionId ?? 0);
+      el.trackBinInfo.innerHTML = `
+        <div>${escapeHtml(t("trackBinDetails", {
+          section: part.trackSectionId ?? "-",
+          angle: formatNumber(THREE.MathUtils.radToDeg(part.trackAngleRadians || 0)),
+          index: part.trackIndexId ?? "-"
+        }))}</div>
+        <div>${escapeHtml(t("trackBinFlags", { vertexStart: part.trackVertexStart ?? 0 }))}</div>
+        <div class="track-bin-edit-row">
+          <label>Section <select data-track-field="section">${sectionOptions}</select></label>
+          <label>Alpha <input type="number" min="0" max="1" step="1" value="${Number(part.trackAlphaFlag ?? 0)}" data-track-field="alpha" /></label>
+          <label>Cull <input type="number" min="0" max="1" step="1" value="${Number(part.trackCullFlag ?? 1)}" data-track-field="cull" /></label>
+        </div>
+      `;
+    }
+  } else if (!state.currentModel) {
+    el.showSkeleton.disabled = true;
+  } else {
+    el.showSkeleton.disabled = false;
+  }
+}
+
+function buildTrackSectionOptions(selectedSectionId) {
+  const maxSectionId = Math.max(31, selectedSectionId, ...((state.currentModel?.submeshes || []).map((part) => part.trackSectionId ?? 0)));
+  let html = "";
+  for (let index = 0; index <= maxSectionId; index++) {
+    html += `<option value="${index}"${index === selectedSectionId ? " selected" : ""}>${index}</option>`;
+  }
+  return html;
+}
+
+function handleTrackBinInfoInput(event) {
+  const input = event.target.closest("[data-track-field]");
+  if (!input || !isTrackBinModel() || state.editIndex < 0) return;
+  const part = state.currentModel.submeshes[state.editIndex];
+  if (!part) return;
+  pushUndoSnapshot();
+  const value = Math.max(0, Math.floor(Number(input.value) || 0));
+  if (input.dataset.trackField === "section") {
+    const previousSectionId = part.trackSectionId;
+    if (previousSectionId !== value) part.trackIndexId = getNextTrackIndexId(value, part);
+    part.trackSectionId = value;
+    part.trackAngleRadians = state.currentModel.trackSections?.[value]?.angleRadians ?? THREE.MathUtils.degToRad(5.625 + value * 11.25);
+    const oldName = part.name;
+    part.name = makeTrackPartName(part.trackSectionId, part.trackIndexId);
+    const node = state.boneNodes.get(oldName);
+    if (node) {
+      state.boneNodes.delete(oldName);
+      node.name = `${part.name} bone`;
+      state.boneNodes.set(part.name, node);
+    }
+    state.meshEntries[state.editIndex].mesh.name = part.name;
+    syncTrackPartNode(part);
+    el.editorName.textContent = part.name;
+    el.editName.value = part.name;
+    const nextIndex = sortTrackPartsForDisplay(part);
+    populateSubmeshList(state.currentModel);
+    state.editIndex = nextIndex;
+    state.highlightedPartIndex = nextIndex;
+    updateHighlightedRows();
+    scrollHighlightedPartIntoView(nextIndex);
+  } else if (input.dataset.trackField === "alpha") {
+    part.trackAlphaFlag = value ? 1 : 0;
+    applyTrackPartRenderFlags(state.editIndex);
+  } else if (input.dataset.trackField === "cull") {
+    part.trackCullFlag = value ? 1 : 0;
+    applyTrackPartRenderFlags(state.editIndex);
+  }
+  updateModelFormatUi(part);
+  updateHighlightInfo();
+}
+
+function sortTrackPartsForDisplay(selectedPart = null) {
+  if (!isTrackBinModel() || !state.currentModel) return state.editIndex;
+  const pairs = state.currentModel.submeshes.map((part, oldIndex) => ({
+    part,
+    entry: state.meshEntries[oldIndex],
+    oldIndex
+  }));
+  pairs.sort((a, b) => {
+    const sectionDelta = (a.part.trackSectionId ?? 0) - (b.part.trackSectionId ?? 0);
+    if (sectionDelta) return sectionDelta;
+    const indexDelta = (a.part.trackIndexId ?? 0) - (b.part.trackIndexId ?? 0);
+    return indexDelta || a.oldIndex - b.oldIndex;
+  });
+  let changed = false;
+  const oldToNew = new Map();
+  for (const [newIndex, pair] of pairs.entries()) {
+    oldToNew.set(pair.oldIndex, newIndex);
+    if (pair.oldIndex !== newIndex) changed = true;
+  }
+  if (!changed) return selectedPart ? pairs.findIndex((pair) => pair.part === selectedPart) : state.editIndex;
+
+  state.currentModel.submeshes = pairs.map((pair) => pair.part);
+  state.meshEntries = pairs.map((pair) => pair.entry);
+  state.batchSelectedParts = new Set([...state.batchSelectedParts]
+    .map((oldIndex) => oldToNew.get(oldIndex))
+    .filter((index) => Number.isInteger(index)));
+  if (state.editIndex >= 0) state.editIndex = oldToNew.get(state.editIndex) ?? -1;
+  if (state.highlightedPartIndex >= 0) state.highlightedPartIndex = oldToNew.get(state.highlightedPartIndex) ?? -1;
+  rebuildNormalVisualizers();
+  rebuildMeshNameLabels();
+  return selectedPart ? state.currentModel.submeshes.indexOf(selectedPart) : state.editIndex;
+}
+
+function applyTrackPartRenderFlags(index) {
+  const part = state.currentModel?.submeshes[index];
+  const entry = state.meshEntries[index];
+  if (!part || !entry?.material) return;
+  entry.material.side = part.trackCullFlag === 0 ? THREE.DoubleSide : THREE.FrontSide;
+  entry.material.transparent = entry.material.transparent || part.trackAlphaFlag === 1;
+  entry.material.alphaTest = part.trackAlphaFlag === 1 ? Math.max(entry.material.alphaTest || 0, 0.1) : 0;
+  entry.material.needsUpdate = true;
+}
+
+function cloneRenderableMaterial(material) {
+  const clone = material?.clone?.() || new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const sourceBaseMap = getMaterialBaseMap(material);
+  if (sourceBaseMap) clone.map = sourceBaseMap;
+  clone.userData = { ...(material?.userData || {}) };
+  clone.userData.baseMap = sourceBaseMap || getRenderableTexture(clone.map);
+  sanitizeMaterialTextures(clone);
+  return clone;
+}
+
+function sanitizeMaterialTextures(material) {
+  if (!material) return;
+  const textureSlots = [
+    "map",
+    "alphaMap",
+    "aoMap",
+    "bumpMap",
+    "displacementMap",
+    "emissiveMap",
+    "envMap",
+    "lightMap",
+    "metalnessMap",
+    "normalMap",
+    "roughnessMap",
+    "specularMap"
+  ];
+  for (const slot of textureSlots) {
+    if (slot in material) material[slot] = getRenderableTexture(material[slot]);
+  }
+  material.userData ||= {};
+  material.userData.baseMap = getRenderableTexture(material.userData.baseMap) || material.map || null;
+}
+
+function getMaterialBaseMap(material) {
+  return getRenderableTexture(material?.userData?.baseMap) || getRenderableTexture(material?.map) || null;
+}
+
+function getRenderableTexture(texture) {
+  if (!texture || !texture.isTexture) return null;
+  return ensureTextureMatrix(texture);
 }
 
 async function exportPartGlb(index) {
@@ -2439,6 +2999,7 @@ async function createAlphaPngTexture(sourceTexture) {
   }
 
   const texture = new THREE.CanvasTexture(canvas);
+  ensureTextureMatrix(texture);
   texture.name = sourceTexture.name || "";
   texture.colorSpace = sourceTexture.colorSpace || THREE.SRGBColorSpace;
   texture.flipY = sourceTexture.flipY;
@@ -2461,7 +3022,7 @@ function buildTransformEditor(part) {
     buildMatrixEditor(part);
     return;
   }
-  const transform = getPartTransform(part);
+  const transform = getEditorTransform(part);
   for (const control of TRANSFORM_CONTROLS) {
     const row = document.createElement("div");
     row.className = "transform-row";
@@ -2549,6 +3110,11 @@ function buildMatrixEditor(part) {
   el.transformEditor.append(grid);
 }
 
+function getEditorTransform(part) {
+  if (!isTrackBinModel() || !part) return getPartTransform(part);
+  return decomposeRenderMatrix(new THREE.Matrix4().fromArray(part.matrix || createIdentityMatrixArray()));
+}
+
 function createTransformInput(type, control, transform) {
   const input = document.createElement("input");
   input.type = type;
@@ -2559,12 +3125,20 @@ function createTransformInput(type, control, transform) {
   const rawValue = control.transform === "rotation"
     ? THREE.MathUtils.radToDeg(transform.rotation[control.axis])
     : transform[control.transform][control.axis];
-  const min = Math.min(control.min, rawValue);
-  const max = Math.max(control.max, rawValue);
+  const sliderScale = control.transform === "position" ? getTransformPositionScale() : 1;
+  const rangeMin = isTrackBinModel() && control.transform === "rotation" ? -720 : control.min;
+  const rangeMax = isTrackBinModel() && control.transform === "rotation" ? 720 : control.max;
+  const min = Math.min(rangeMin * sliderScale, rawValue);
+  const max = Math.max(rangeMax * sliderScale, rawValue);
   input.min = String(min);
   input.max = String(max);
+  input.step = String(control.step * sliderScale);
   input.value = formatNumber(rawValue);
   return input;
+}
+
+function getTransformPositionScale() {
+  return Math.max(0.0001, state.currentModel?.transformSliderScale || 1);
 }
 
 function applyEditorValues() {
@@ -2591,11 +3165,23 @@ function applyEditorValues() {
   }
   const previousMaterialId = part.materialId;
   part.materialId = Number(el.editMaterial.value) || 0;
-  part.parentId = Number(el.editParent.value);
+  const nextParentId = isTrackBinModel() ? -1 : Number(el.editParent.value);
+  if (!isTrackBinModel() && wouldCreateParentCycle(state.editIndex, nextParentId)) {
+    part.parentId = previousParentId;
+    el.editParent.value = String(previousParentId);
+    setStatus("Invalid parent: parent hierarchy cannot contain a cycle.");
+    return;
+  }
+  part.parentId = nextParentId;
   if (part.materialId !== previousMaterialId) {
     const material = findRenderedMaterial(part.materialId, state.editIndex);
     if (material) {
       const entry = state.meshEntries[state.editIndex];
+      if (isTrackBinModel()) {
+        material.side = part.trackCullFlag === 0 ? THREE.DoubleSide : THREE.FrontSide;
+        material.transparent = material.transparent || part.trackAlphaFlag === 1;
+        material.alphaTest = part.trackAlphaFlag === 1 ? Math.max(material.alphaTest || 0, 0.1) : material.alphaTest;
+      }
       entry.material = entry.mesh.material = material;
     }
   }
@@ -2605,11 +3191,15 @@ function applyEditorValues() {
     const nextLocal = new THREE.Matrix4().copy(parentWorld).invert().multiply(previousWorldMatrix);
     part.matrix = renderMatrixToMd9Array(nextLocal);
     buildTransformEditor(part);
+  } else if (isTrackBinModel()) {
+    applyTrackTransformInputs(part);
+    syncTrackPartNode(part);
+    syncTrackPartMeshTransform(state.editIndex);
   } else {
     part.matrix = el.matrixMode.checked ? matrixInputsToMd9Matrix() : transformInputsToMd9Matrix();
+    syncPartBone(part);
   }
 
-  syncPartBone(part);
   updateModelDerivedData();
   updateHighlightInfo();
   setStatus(t("updatedPart", { name: part.name }));
@@ -2634,14 +3224,32 @@ function makeUniquePartName() {
   return name;
 }
 
-function getPartWorldRenderMatrix(index, cache = new Map()) {
+function wouldCreateParentCycle(index, parentId) {
+  if (parentId < 0) return false;
+  const parts = state.currentModel?.submeshes || [];
+  const visited = new Set([index]);
+  let cursor = parentId;
+  while (cursor >= 0) {
+    if (visited.has(cursor)) return true;
+    visited.add(cursor);
+    const parent = parts[cursor];
+    if (!parent) return true;
+    cursor = parent.parentId;
+  }
+  return false;
+}
+
+function getPartWorldRenderMatrix(index, cache = new Map(), visiting = new Set()) {
   if (cache.has(index)) return cache.get(index).clone();
   const part = state.currentModel?.submeshes[index];
   if (!part) return new THREE.Matrix4();
+  if (visiting.has(index)) throw new Error("Parent hierarchy contains a cycle.");
+  visiting.add(index);
   const local = md9ArrayToRenderMatrix(part.matrix);
-  const parentWorld = part.parentId >= 0 ? getPartWorldRenderMatrix(part.parentId, cache) : new THREE.Matrix4();
+  const parentWorld = part.parentId >= 0 ? getPartWorldRenderMatrix(part.parentId, cache, visiting) : new THREE.Matrix4();
   const world = new THREE.Matrix4().multiplyMatrices(parentWorld, local);
   cache.set(index, world.clone());
+  visiting.delete(index);
   return world;
 }
 
@@ -2666,7 +3274,9 @@ function applyBatchEditorDelta() {
   const next = batchInputsToRenderMatrix();
   const previousInverse = state.batchTransformMatrix.clone().invert();
   const delta = new THREE.Matrix4().multiplyMatrices(next, previousInverse);
-  if (el.batchGroupTransform.checked) {
+  if (isTrackBinModel()) {
+    applyIndependentBatchDelta(indices, delta);
+  } else if (el.batchGroupTransform.checked) {
     applyGroupBatchDelta(indices, delta);
   } else {
     applyIndependentBatchDelta(indices, delta);
@@ -2677,6 +3287,17 @@ function applyBatchEditorDelta() {
 }
 
 function applyIndependentBatchDelta(indices, delta) {
+  if (isTrackBinModel()) {
+    for (const index of indices) {
+      const part = state.currentModel.submeshes[index];
+      const current = new THREE.Matrix4().fromArray(part.matrix || createIdentityMatrixArray());
+      const updated = new THREE.Matrix4().multiplyMatrices(current, delta);
+      part.matrix = updated.toArray();
+      syncTrackPartNode(part);
+      syncTrackPartMeshTransform(index);
+    }
+    return;
+  }
   const previousPosition = new THREE.Vector3().setFromMatrixPosition(state.batchTransformMatrix);
   const nextPosition = new THREE.Vector3().setFromMatrixPosition(batchInputsToRenderMatrix());
   const translationDelta = nextPosition.sub(previousPosition);
@@ -2772,6 +3393,42 @@ function transformInputsToMd9Matrix() {
   return renderMatrixToMd9Array(renderMatrix);
 }
 
+function trackTransformInputsToMatrix() {
+  const position = new THREE.Vector3();
+  const rotation = new THREE.Euler();
+  const scale = new THREE.Vector3(1, 1, 1);
+  for (const input of el.transformEditor.querySelectorAll("[data-input-kind='number']")) {
+    const value = Number(input.value) || 0;
+    const axis = input.dataset.axis;
+    if (input.dataset.transform === "position") position[axis] = value;
+    if (input.dataset.transform === "rotation") rotation[axis] = THREE.MathUtils.degToRad(value);
+    if (input.dataset.transform === "scale") scale[axis] = value || 1;
+  }
+  return new THREE.Matrix4().compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
+}
+
+function applyTrackTransformInputs(part) {
+  const editorMatrix = trackTransformInputsToMatrix();
+  part.matrix = editorMatrix.toArray();
+}
+
+function getTrackPartWorldTransform(part, editorMatrix = null) {
+  const frame = getTrackPartFrameMatrix(part);
+  const inverseFrame = frame.clone().invert();
+  return new THREE.Matrix4()
+    .multiplyMatrices(frame, editorMatrix || new THREE.Matrix4().fromArray(part.matrix || createIdentityMatrixArray()))
+    .multiply(inverseFrame);
+}
+
+function syncTrackPartMeshTransform(index) {
+  const part = state.currentModel?.submeshes[index];
+  const entry = state.meshEntries[index];
+  if (!part || !entry?.mesh) return;
+  entry.mesh.matrixAutoUpdate = false;
+  entry.mesh.matrix.copy(getTrackPartWorldTransform(part));
+  entry.mesh.matrixWorldNeedsUpdate = true;
+}
+
 function matrixInputsToMd9Matrix() {
   const matrix = new Array(16).fill(0);
   matrix[0] = 1;
@@ -2786,7 +3443,7 @@ function matrixInputsToMd9Matrix() {
 
 function findRenderedMaterial(materialId, excludeIndex = -1) {
   const match = state.meshEntries.find((entry, index) => index !== excludeIndex && entry.part.materialId === materialId && entry.material);
-  if (match) return match.material;
+  if (match) return isTrackBinModel() ? cloneRenderableMaterial(match.material) : match.material;
   const material = state.currentModel?.materials[materialId];
   if (!material) return null;
   return new THREE.MeshBasicMaterial({
@@ -2796,7 +3453,9 @@ function findRenderedMaterial(materialId, excludeIndex = -1) {
 }
 
 function syncPartBone(part) {
-  const transform = getPartTransform(part);
+  const transform = isTrackBinModel()
+    ? { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) }
+    : getPartTransform(part);
   part.bonePosition.copy(transform.position);
   const node = state.boneNodes.get(part.name);
   if (node) {
@@ -2808,6 +3467,21 @@ function syncPartBone(part) {
     node.userData.defaultQuaternion.copy(transform.quaternion);
     node.userData.defaultScale = transform.scale.clone();
   }
+}
+
+function syncTrackPartNode(part) {
+  part.bonePosition.set(0, 0, 0);
+  part.worldBonePosition.set(0, 0, 0);
+  const node = state.boneNodes.get(part.name);
+  if (!node) return;
+  reparentPartNode(part, node);
+  node.matrixAutoUpdate = true;
+  node.position.set(0, 0, 0);
+  node.quaternion.identity();
+  node.scale.set(1, 1, 1);
+  node.userData.defaultPosition.set(0, 0, 0);
+  node.userData.defaultQuaternion.identity();
+  node.userData.defaultScale.set(1, 1, 1);
 }
 
 function reparentPartNode(part, node) {
@@ -2829,6 +3503,10 @@ function isDescendantOf(object, possibleAncestor) {
 
 function getPartTransform(part) {
   const renderMatrix = md9ArrayToRenderMatrix(part.matrix);
+  return decomposeRenderMatrix(renderMatrix);
+}
+
+function decomposeRenderMatrix(renderMatrix) {
   const position = new THREE.Vector3();
   const quaternion = new THREE.Quaternion();
   const scale = new THREE.Vector3();
@@ -2841,27 +3519,54 @@ function getPartTransform(part) {
   };
 }
 
+function getTrackPartFrameMatrix(part) {
+  const angle = part?.trackAngleRadians || 0;
+  const axis = new THREE.Vector3(1, 0, 0);
+  const radial = new THREE.Vector3(0, Math.cos(angle), -Math.sin(angle));
+  const tangent = new THREE.Vector3(0, -Math.sin(angle), -Math.cos(angle));
+  return new THREE.Matrix4().makeBasis(axis, radial, tangent);
+}
+
+function createTrackNewPartMatrix(part, sourcePart = null) {
+  const sourceBox = sourcePart ? computeArrayBox(sourcePart.localPositions) : null;
+  const sourceCenter = sourceBox && !sourceBox.isEmpty()
+    ? sourceBox.getCenter(new THREE.Vector3()).applyMatrix4(getTrackPartWorldTransform(sourcePart))
+    : new THREE.Vector3();
+  const localCenter = sourceCenter.applyMatrix4(getTrackPartFrameMatrix(part).clone().invert());
+  return new THREE.Matrix4().setPosition(localCenter).toArray();
+}
+
 function md9ArrayToRenderMatrix(matrixArray) {
+  if (!matrixArray || matrixArray.length < 16) return new THREE.Matrix4();
   const md9Matrix = new THREE.Matrix4().fromArray(matrixArray);
   return new THREE.Matrix4().multiplyMatrices(FLIP_Z_MATRIX, md9Matrix).multiply(FLIP_Z_MATRIX);
 }
 
 function renderMatrixToMd9Array(renderMatrix) {
+  if (!renderMatrix || !renderMatrix.elements) return new THREE.Matrix4().identity().toArray();
   return new THREE.Matrix4().multiplyMatrices(FLIP_Z_MATRIX, renderMatrix).multiply(FLIP_Z_MATRIX).toArray();
+}
+
+function createIdentityMatrixArray() {
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 }
 
 function addPart() {
   if (!state.currentModel || !state.root) return;
   pushUndoSnapshot();
-  const name = makeUniqueNewPartName();
-  const parentId = state.editIndex >= 0 ? state.editIndex : -1;
+  const sourceIndex = state.highlightedPartIndex >= 0 ? state.highlightedPartIndex : state.editIndex;
+  const sourcePart = state.currentModel.submeshes[sourceIndex];
+  const trackSectionId = isTrackBinModel() ? (sourcePart?.trackSectionId ?? 0) : -1;
+  const trackIndexId = isTrackBinModel() ? getNextTrackIndexId(trackSectionId) : -1;
+  const name = isTrackBinModel() ? makeTrackPartName(trackSectionId, trackIndexId) : makeUniqueNewPartName();
+  const parentId = isTrackBinModel() ? -1 : (state.editIndex >= 0 ? state.editIndex : -1);
   const parentPart = state.currentModel.submeshes[parentId];
   const size = getAveragePartSize();
   const half = size * 0.5;
   const cube = createCubeMeshData(half);
   const part = {
     name,
-    matrix: new THREE.Matrix4().identity().toArray(),
+    matrix: createIdentityMatrixArray(),
     boundingBox: [-half, -half, -half, half, half, half],
     localPositions: cube.positions,
     normals: cube.normals,
@@ -2875,6 +3580,16 @@ function addPart() {
     worldBonePosition: parentPart?.worldBonePosition?.clone?.() || new THREE.Vector3(),
     replacement: null
   };
+  if (isTrackBinModel()) {
+    part.trackSectionId = trackSectionId;
+    part.trackIndexId = trackIndexId;
+    part.trackAngleRadians = sourcePart?.trackAngleRadians ?? state.currentModel.trackSections?.[part.trackSectionId]?.angleRadians ?? THREE.MathUtils.degToRad(5.625);
+    part.matrix = createTrackNewPartMatrix(part, sourcePart);
+    part.trackVertexStart = 0;
+    part.trackAlphaFlag = 0;
+    part.trackCullFlag = 1;
+    part.trackSentinel = TRACK_BIN_RANGE_SENTINEL;
+  }
   part.initialState = clonePartState(part);
   state.currentModel.submeshes.push(part);
 
@@ -2892,14 +3607,17 @@ function addPart() {
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(part.uvs, 2));
   geometry.setIndex(new THREE.Uint16BufferAttribute(part.indices, 1));
   geometry.computeBoundingSphere();
-  const material = state.meshEntries[0]?.material || new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const baseMaterial = state.meshEntries[0]?.material || new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const material = isTrackBinModel() ? cloneRenderableMaterial(baseMaterial) : baseMaterial;
+  if (isTrackBinModel()) material.side = THREE.FrontSide;
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = part.name;
   mesh.userData.part = part;
   node.add(mesh);
   state.meshEntries.push({ mesh, material, part });
+  if (isTrackBinModel()) syncTrackPartMeshTransform(state.meshEntries.length - 1);
 
-  state.editIndex = state.currentModel.submeshes.length - 1;
+  state.editIndex = isTrackBinModel() ? sortTrackPartsForDisplay(part) : state.currentModel.submeshes.length - 1;
   rebuildSceneHelpers();
   updateModelDerivedData();
   populateSubmeshList(state.currentModel);
@@ -2912,9 +3630,10 @@ function duplicateHighlightedPart() {
   pushUndoSnapshot();
   const sourcePart = state.currentModel.submeshes[sourceIndex];
   const sourceEntry = state.meshEntries[sourceIndex];
+  const duplicateTrackIndexId = isTrackBinModel() ? getNextTrackIndexId(sourcePart.trackSectionId ?? 0) : -1;
   const part = {
-    name: makeUniqueCopyPartName(sourcePart.name),
-    matrix: [...sourcePart.matrix],
+    name: isTrackBinModel() ? makeTrackPartName(sourcePart.trackSectionId ?? 0, duplicateTrackIndexId) : makeUniqueCopyPartName(sourcePart.name),
+    matrix: isTrackBinModel() ? createIdentityMatrixArray() : (sourcePart.matrix ? [...sourcePart.matrix] : createIdentityMatrixArray()),
     boundingBox: [...sourcePart.boundingBox],
     localPositions: new Float32Array(sourcePart.localPositions),
     normals: new Float32Array(sourcePart.normals),
@@ -2928,10 +3647,17 @@ function duplicateHighlightedPart() {
     worldBonePosition: sourcePart.worldBonePosition?.clone?.() || new THREE.Vector3(),
     replacement: null
   };
+  copyTrackPartMetadata(sourcePart, part);
+  if (isTrackBinModel()) {
+    part.parentId = -1;
+    part.trackIndexId = duplicateTrackIndexId;
+  }
   part.initialState = clonePartState(part);
   state.currentModel.submeshes.push(part);
 
-  const transform = getPartTransform(part);
+  const transform = isTrackBinModel()
+    ? { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) }
+    : getPartTransform(part);
   const node = new THREE.Group();
   node.name = `${part.name} bone`;
   node.position.copy(transform.position);
@@ -2941,7 +3667,7 @@ function duplicateHighlightedPart() {
   node.userData.defaultQuaternion = transform.quaternion.clone();
   node.userData.defaultScale = transform.scale.clone();
   state.boneNodes.set(part.name, node);
-  const parentPart = state.currentModel.submeshes[part.parentId];
+  const parentPart = isTrackBinModel() ? null : state.currentModel.submeshes[part.parentId];
   (parentPart ? state.boneNodes.get(parentPart.name) : state.root)?.add(node);
 
   const geometry = new THREE.BufferGeometry();
@@ -2950,13 +3676,16 @@ function duplicateHighlightedPart() {
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(part.uvs, 2));
   geometry.setIndex(new THREE.Uint16BufferAttribute(part.indices, 1));
   geometry.computeBoundingSphere();
-  const mesh = new THREE.Mesh(geometry, sourceEntry.material);
+  const sourceMaterial = sourceEntry.material || sourceEntry.mesh?.material || state.meshEntries[0]?.material || new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const material = isTrackBinModel() ? cloneRenderableMaterial(sourceMaterial) : sourceMaterial;
+  const mesh = new THREE.Mesh(geometry, material);
   mesh.name = part.name;
   mesh.userData.part = part;
   node.add(mesh);
-  state.meshEntries.push({ mesh, material: sourceEntry.material, part });
+  state.meshEntries.push({ mesh, material, part });
+  if (isTrackBinModel()) syncTrackPartMeshTransform(state.meshEntries.length - 1);
 
-  const newIndex = state.currentModel.submeshes.length - 1;
+  const newIndex = isTrackBinModel() ? sortTrackPartsForDisplay(part) : state.currentModel.submeshes.length - 1;
   rebuildSceneHelpers();
   updateModelDerivedData();
   populateSubmeshList(state.currentModel);
@@ -3042,7 +3771,11 @@ async function restoreEditedPart() {
   const entry = state.meshEntries[state.editIndex];
   if (entry.mesh) entry.mesh.name = part.name;
   entry.material = entry.mesh.material = await createMaterial(state.currentModel.materials[part.materialId], state.currentModel.baseDir);
-  syncPartBone(part);
+  if (isTrackBinModel()) {
+    syncTrackPartNode(part);
+  } else {
+    syncPartBone(part);
+  }
   updatePartGeometry(state.editIndex);
   updateModelDerivedData();
   openPartEditor(state.editIndex);
@@ -3061,6 +3794,7 @@ function restorePartFromState(part, snapshot) {
   part.parentId = snapshot.parentId;
   part.vertexCount = snapshot.vertexCount;
   part.faceCount = snapshot.faceCount;
+  copyTrackPartMetadata(snapshot, part);
   part.replacement = null;
 }
 
@@ -3187,7 +3921,7 @@ async function importSkinnedGltfFiles(files) {
       sleeveLength: Number(el.skinSleeveLength.value) || 0.12
     });
     const id = `generated:${model.name}:${Date.now()}`;
-    state.md9Files.push({ id, label: model.name, model });
+    state.md9Files.push({ id, label: model.name, model, format: MD9_FORMAT });
     state.currentMd9Id = id;
     updateModelSelect();
     await showModel(model, model.name);
@@ -3233,7 +3967,11 @@ async function replacePartWithModelFiles(partIndex, modelFile, files, options = 
   if (replacement.textureSources?.length) {
     await bakeReplacementTextures(replacement);
   }
-  normalizeReplacementToPart(replacement, part, { keepSize: options.keepSize });
+  if (isTrackBinModel()) {
+    normalizeTrackReplacementToPart(replacement, part, { keepSize: options.keepSize });
+  } else {
+    normalizeReplacementToPart(replacement, part, { keepSize: options.keepSize });
+  }
 
   part.replacement = {
     sourcePositions: replacement.positions,
@@ -3281,7 +4019,19 @@ async function replacePartWithModelFiles(partIndex, modelFile, files, options = 
   part.indices = replacement.indices;
   part.vertexCount = replacement.positions.length / 3;
   part.faceCount = Math.floor(replacement.indices.length / 3);
+  part.boundingBox = isTrackBinModel()
+    ? boxToTrackBoundingArray(computeArrayBox(part.localPositions))
+    : part.boundingBox;
+  if (isTrackBinModel()) {
+    const entry = state.meshEntries[partIndex];
+    if (entry?.material) {
+      entry.material.side = part.trackCullFlag === 0 ? THREE.DoubleSide : THREE.FrontSide;
+      entry.material.transparent = entry.material.transparent || part.trackAlphaFlag === 1;
+      entry.material.alphaTest = part.trackAlphaFlag === 1 ? Math.max(entry.material.alphaTest || 0, 0.1) : entry.material.alphaTest;
+    }
+  }
   updatePartGeometry(partIndex);
+  if (isTrackBinModel()) syncTrackPartMeshTransform(partIndex);
   updateModelDerivedData();
 }
 
@@ -3520,6 +4270,7 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
       activeBuckets[ref.partIndex].uvs[ref.uvOffset + 1] = remapped.v;
     }
     previewTexture = new THREE.CanvasTexture(atlas.canvas);
+    ensureTextureMatrix(previewTexture);
     previewTexture.colorSpace = THREE.SRGBColorSpace;
     previewTexture.flipY = false;
     previewTexture.wrapS = THREE.ClampToEdgeWrapping;
@@ -3533,17 +4284,20 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
   const model = {
     name: `${modelFile.name.replace(/\.[^.]+$/, "")}.md9`,
     baseDir: "",
+    format: MD9_FORMAT,
     newFormat: true,
     materials,
     submeshes,
     totalVertices: 0,
     totalFaces: 0,
     bounds: new THREE.Box3(),
+    transformSliderScale: 1,
     generatedAnimations: createAniAnimationsFromGltf(gltf, bones)
   };
   captureInitialModelState(model);
   updateGeneratedModelCounts(model);
   if (previewTexture) {
+    ensureTextureMatrix(previewTexture);
     model.materials[0].atlasSourceImage = material.atlasSourceImage;
     model.materials[0].atlasHasAlpha = material.atlasHasAlpha;
   }
@@ -4077,17 +4831,38 @@ function promoteImportedRootPart(submeshes) {
 }
 
 function buildPartWorldMatrices(submeshes) {
+  validateParentHierarchy(submeshes);
   const cache = new Map();
+  const visiting = new Set();
   const getWorld = (index) => {
     if (cache.has(index)) return cache.get(index);
+    if (visiting.has(index)) throw new Error("Parent hierarchy contains a cycle.");
+    visiting.add(index);
     const part = submeshes[index];
     const local = md9ArrayToRenderMatrix(part.matrix);
     const parentWorld = part.parentId >= 0 ? getWorld(part.parentId) : new THREE.Matrix4();
     const world = new THREE.Matrix4().multiplyMatrices(parentWorld, local);
     cache.set(index, world);
+    visiting.delete(index);
     return world;
   };
   return submeshes.map((_, index) => getWorld(index).clone());
+}
+
+function validateParentHierarchy(submeshes) {
+  const stateByIndex = new Uint8Array(submeshes.length);
+  const visit = (index) => {
+    if (index < 0) return;
+    if (!submeshes[index]) throw new Error("Parent hierarchy references a missing part.");
+    if (stateByIndex[index] === 1) throw new Error("Parent hierarchy contains a cycle.");
+    if (stateByIndex[index] === 2) return;
+    stateByIndex[index] = 1;
+    const parentId = submeshes[index].parentId;
+    if (parentId >= submeshes.length) throw new Error("Parent hierarchy references a missing part.");
+    if (parentId >= 0) visit(parentId);
+    stateByIndex[index] = 2;
+  };
+  for (let index = 0; index < submeshes.length; index++) visit(index);
 }
 
 function computePartWorldBox(part, worldMatrix) {
@@ -4189,18 +4964,23 @@ function makeUniqueImportedBoneName(name, index) {
 }
 
 function updateGeneratedModelCounts(model) {
+  validateParentHierarchy(model.submeshes);
   model.totalVertices = model.submeshes.reduce((sum, part) => sum + part.vertexCount, 0);
   model.totalFaces = model.submeshes.reduce((sum, part) => sum + part.faceCount, 0);
   model.bounds = new THREE.Box3();
   const point = new THREE.Vector3();
   const worldMatrices = new Map();
+  const visiting = new Set();
   const getWorldMatrix = (index) => {
     if (worldMatrices.has(index)) return worldMatrices.get(index);
+    if (visiting.has(index)) throw new Error("Parent hierarchy contains a cycle.");
+    visiting.add(index);
     const part = model.submeshes[index];
     const local = md9ArrayToRenderMatrix(part.matrix);
     const parentWorld = part.parentId >= 0 ? getWorldMatrix(part.parentId) : new THREE.Matrix4();
     const world = new THREE.Matrix4().multiplyMatrices(parentWorld, local);
     worldMatrices.set(index, world);
+    visiting.delete(index);
     return world;
   };
   for (const part of model.submeshes) {
@@ -4398,6 +5178,7 @@ async function bakeReplacementTextures(replacement) {
   }
 
   const texture = new THREE.CanvasTexture(atlas.canvas);
+  ensureTextureMatrix(texture);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.flipY = false;
   texture.generateMipmaps = false;
@@ -4606,6 +5387,34 @@ function normalizeReplacementToPart(replacement, part, options = {}) {
   }
 }
 
+function normalizeTrackReplacementToPart(replacement, part, options = {}) {
+  const sourceBox = computeArrayBox(replacement.positions);
+  const targetBox = computeArrayBox(part.localPositions);
+  if (sourceBox.isEmpty() || targetBox.isEmpty()) return;
+
+  const sourceSize = sourceBox.getSize(new THREE.Vector3());
+  const targetSize = targetBox.getSize(new THREE.Vector3());
+  const sourceMax = Math.max(sourceSize.x, sourceSize.y, sourceSize.z);
+  const targetMax = Math.max(targetSize.x, targetSize.y, targetSize.z);
+  if (sourceMax <= 0 || targetMax <= 0) return;
+
+  const scale = options.keepSize ? 1 : targetMax / sourceMax;
+  const sourceCenter = sourceBox.getCenter(new THREE.Vector3());
+  for (let i = 0; i < replacement.positions.length; i += 3) {
+    replacement.positions[i] = (replacement.positions[i] - sourceCenter.x) * scale;
+    replacement.positions[i + 1] = (replacement.positions[i + 1] - sourceCenter.y) * scale;
+    replacement.positions[i + 2] = (replacement.positions[i + 2] - sourceCenter.z) * scale;
+  }
+
+  const targetCenter = targetBox
+    .getCenter(new THREE.Vector3())
+    .applyMatrix4(getTrackPartWorldTransform(part))
+    .applyMatrix4(getTrackPartFrameMatrix(part).clone().invert());
+  const matrix = new THREE.Matrix4().fromArray(part.matrix || createIdentityMatrixArray());
+  matrix.setPosition(targetCenter);
+  part.matrix = matrix.toArray();
+}
+
 function computeArrayBox(positions) {
   const box = new THREE.Box3();
   const point = new THREE.Vector3();
@@ -4628,8 +5437,10 @@ function updatePartGeometry(index) {
   entry.mesh.geometry.dispose();
   entry.mesh.geometry = geometry;
   entry.part = part;
+  if (isTrackBinModel()) syncTrackPartMeshTransform(index);
   rebuildNormalVisualizers();
   applyOptions();
+  if (index === state.highlightedPartIndex) refreshHighlightedMaterial();
 }
 
 function updateAllPartGeometries() {
@@ -4641,6 +5452,7 @@ function updateAllPartGeometries() {
     geometry.computeBoundingSphere();
     geometry.attributes.position.needsUpdate = true;
     entry.part = part;
+    if (isTrackBinModel()) syncTrackPartMeshTransform(index);
   }
   rebuildNormalVisualizers();
   applyOptions();
@@ -4671,6 +5483,29 @@ function scaleCurrentModelToHeight() {
   pushUndoSnapshot();
   applyWorldTransformToModelGeometry(transform);
   setStatus(t("scaledModelHeight", { height: formatNumber(targetHeight) }));
+}
+
+function scaleCurrentModelByFactor() {
+  const model = state.currentModel;
+  if (!model) return;
+  const factor = Number(el.modelScaleFactor.value);
+  if (!Number.isFinite(factor) || factor <= 0) {
+    setStatus(t("invalidHeight"));
+    return;
+  }
+  model.transformSliderScale = Math.max(0.0001, factor);
+  updateReferenceScale();
+  if (state.editIndex >= 0) buildTransformEditor(model.submeshes[state.editIndex]);
+  setStatus(t("scaledModelFactor", { factor: formatNumber(factor) }));
+}
+
+function updateReferenceScale() {
+  const scale = Math.max(0.0001, state.currentModel?.transformSliderScale || 1);
+  grid.scale.setScalar(scale);
+  if (el.modelScaleFactor && document.activeElement !== el.modelScaleFactor) {
+    el.modelScaleFactor.value = formatNumber(scale);
+  }
+  grid.updateMatrixWorld(true);
 }
 
 function resetCurrentModelPosition() {
@@ -4748,8 +5583,8 @@ function rebuildSceneHelpers() {
     disposeObject(state.bounds);
     state.bounds = null;
   }
-  state.skeletonLines = createSkeletonLines(state.currentModel);
-  state.root.add(state.skeletonLines);
+  state.skeletonLines = isTrackBinModel() ? null : createSkeletonLines(state.currentModel);
+  if (state.skeletonLines) state.root.add(state.skeletonLines);
   rebuildNormalVisualizers();
   applyOptions();
 }
@@ -4761,18 +5596,30 @@ function updateModelDerivedData() {
   model.totalFaces = 0;
   model.bounds = new THREE.Box3();
   const point = new THREE.Vector3();
+  const corners = Array.from({ length: 8 }, () => new THREE.Vector3());
   state.root?.updateWorldMatrix(true, true);
   for (const part of model.submeshes) {
     model.totalVertices += part.vertexCount;
     model.totalFaces += part.faceCount;
-    const box = new THREE.Box3();
-    const node = state.boneNodes.get(part.name);
-    for (let i = 0; i < part.localPositions.length; i += 3) {
-      point.set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2]);
-      box.expandByPoint(point);
-      model.bounds.expandByPoint(node ? point.clone().applyMatrix4(node.matrixWorld) : point);
+    const box = isTrackBinModel(model) ? trackBoundingArrayToBox(part.boundingBox) : new THREE.Box3();
+    if (box.isEmpty()) {
+      for (let i = 0; i < part.localPositions.length; i += 3) {
+        point.set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2]);
+        box.expandByPoint(point);
+      }
     }
-    part.boundingBox = box.isEmpty()
+    const worldBox = isTrackBinModel(model)
+      ? transformBoxByMatrix(box, getTrackPartWorldTransform(part), corners)
+      : box;
+    const node = state.boneNodes.get(part.name);
+    if (node && !isTrackBinModel(model)) {
+      model.bounds.union(transformBoxByMatrix(worldBox, node.matrixWorld, corners));
+    } else {
+      model.bounds.union(worldBox);
+    }
+    part.boundingBox = isTrackBinModel(model)
+      ? boxToTrackBoundingArray(box)
+      : box.isEmpty()
       ? [0, 0, 0, 0, 0, 0]
       : [
           box.min.x,
@@ -4793,6 +5640,32 @@ function updateModelDerivedData() {
   if (state.meshNameLabels.length !== model.submeshes.length) rebuildMeshNameLabels();
   updateStats(model, model.name);
   applyOptions();
+}
+
+function transformBoxByMatrix(box, matrix, corners = Array.from({ length: 8 }, () => new THREE.Vector3())) {
+  if (!box || box.isEmpty()) return new THREE.Box3();
+  const min = box.min;
+  const max = box.max;
+  corners[0].set(min.x, min.y, min.z);
+  corners[1].set(max.x, min.y, min.z);
+  corners[2].set(min.x, max.y, min.z);
+  corners[3].set(max.x, max.y, min.z);
+  corners[4].set(min.x, min.y, max.z);
+  corners[5].set(max.x, min.y, max.z);
+  corners[6].set(min.x, max.y, max.z);
+  corners[7].set(max.x, max.y, max.z);
+  const transformed = new THREE.Box3();
+  for (const corner of corners) transformed.expandByPoint(corner.applyMatrix4(matrix));
+  return transformed;
+}
+
+function trackBoundingArrayToBox(boundingBox) {
+  if (!boundingBox || boundingBox.length < 6) return new THREE.Box3();
+  const box = new THREE.Box3(
+    new THREE.Vector3(boundingBox[0], boundingBox[1], boundingBox[2]),
+    new THREE.Vector3(boundingBox[3], boundingBox[4], boundingBox[5])
+  );
+  return box.min.x <= box.max.x && box.min.y <= box.max.y && box.min.z <= box.max.z ? box : new THREE.Box3();
 }
 
 async function createMaterialFromFile(material, file) {
@@ -4817,7 +5690,8 @@ function makeAtlasTextureName() {
 
 function makePartTextureName(partName) {
   const base = String(partName || "texture");
-  return normalizeMd9TextureName(base.toLowerCase().startsWith("Nocull_") ? base : `Nocull_${base}`);
+  if (isTrackBinModel()) return normalizeModelTextureName(base, { defaultExt: ".dds", maxLength: 63 });
+  return normalizeModelTextureName(base.toLowerCase().startsWith("nocull_") ? base : `Nocull_${base}`, { defaultExt: ".dds", maxLength: 31 });
 }
 
 function sanitizeFilename(name) {
@@ -4860,16 +5734,18 @@ function updateAnimationSelect() {
   defaultOption.value = "";
   defaultOption.textContent = t("defaultPose");
   el.animationSelect.append(defaultOption);
+  const disabledForModel = isTrackBinModel();
   for (const item of state.aniFiles) {
     const option = document.createElement("option");
     option.value = item.id;
     option.textContent = item.label;
     el.animationSelect.append(option);
   }
-  el.animationSelect.disabled = state.aniFiles.length === 0;
+  el.animationSelect.disabled = disabledForModel || state.aniFiles.length === 0;
   el.clearAnimations.disabled = state.aniFiles.length === 0;
-  el.saveAnimation.disabled = !state.currentAnimation;
-  el.animationSelect.value = state.currentAniId || "";
+  el.saveAnimation.disabled = disabledForModel || !state.currentAnimation;
+  el.autoPlay.disabled = disabledForModel;
+  el.animationSelect.value = disabledForModel ? "" : (state.currentAniId || "");
 }
 
 function clearModels() {
@@ -4884,6 +5760,7 @@ function clearModels() {
   state.batchSelectedParts = new Set();
   el.saveModel.disabled = true;
   el.scaleModelHeight.disabled = true;
+  el.scaleModelFactor.disabled = true;
   el.resetModelPosition.disabled = true;
   el.partFilter.disabled = true;
   el.partFilter.value = "";
@@ -4895,11 +5772,14 @@ function clearModels() {
   el.batchEditToggle.disabled = true;
   populateEditorForNoSelection();
   setEditorEnabled(false);
+  updateModelFormatUi();
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
   el.submeshList.replaceChildren();
   updateStatsEmpty();
   updateModelSelect();
+  updateAnimationSelect();
+  updateReferenceScale();
   updateMissingTextures(null);
   updateHistoryButtons();
   setStatus(t("modelsCleared"));
@@ -5576,7 +6456,7 @@ async function renameMaterialTexture(materialIndex, value) {
   const material = state.currentModel?.materials[materialIndex];
   if (!material) return;
   const oldTextureName = material.textureName || "";
-  const newTextureName = value.trim() ? normalizeMd9TextureName(value) : "";
+  const newTextureName = value.trim() ? normalizeModelTextureName(value, { maxLength: isTrackBinModel() ? 63 : 31 }) : "";
   if (oldTextureName === newTextureName) {
     updateMissingTextures(state.currentModel);
     return;
@@ -5597,7 +6477,7 @@ async function addTextureMaterials(files) {
   pushUndoSnapshot();
   for (const file of textureFiles) {
     state.textureFiles.set(textureKey(file.webkitRelativePath || file.name), file);
-    state.currentModel.materials.push(createMd9MaterialFromThree(null, normalizeMd9TextureName(file.name)));
+    state.currentModel.materials.push(createMd9MaterialFromThree(null, normalizeModelTextureName(file.name, { maxLength: isTrackBinModel() ? 63 : 31 })));
   }
   await refreshCurrentModelView();
   setStatus(t("textureAdded", { count: textureFiles.length }));
@@ -5762,7 +6642,7 @@ function installCameraKeyboardControls() {
   window.addEventListener("keydown", (event) => {
     if (isTypingTarget(event.target)) return;
     const key = event.key.toLowerCase();
-    if (["w", "a", "s", "d"].includes(key)) {
+    if (["w", "a", "s", "d", "e", "q"].includes(key)) {
       state.cameraKeys.add(key);
       event.preventDefault();
     } else if (key === "f") {
@@ -5782,11 +6662,86 @@ function isTypingTarget(target) {
 function installViewportPicking() {
   renderer.domElement.addEventListener("pointerdown", (event) => {
     pointerDown.set(event.clientX, event.clientY);
+    if (event.button === 0) {
+      event.preventDefault();
+      state.cameraDragPointerId = event.pointerId;
+      state.cameraDragStart.set(event.clientX, event.clientY);
+      state.cameraPointerMoved = false;
+      syncCameraOrbitState();
+      requestCameraPointerLock();
+    }
+  });
+  renderer.domElement.addEventListener("pointermove", (event) => {
+    if (state.cameraPointerLocked || state.cameraDragPointerId !== event.pointerId || event.buttons !== 1) return;
+    const movementX = event.movementX || event.clientX - state.cameraDragStart.x;
+    const movementY = event.movementY || event.clientY - state.cameraDragStart.y;
+    if (Math.hypot(movementX, movementY) <= 0) return;
+    state.cameraPointerMoved = true;
+    rotateCameraByPointerMovement(movementX, movementY);
+    state.cameraDragStart.set(event.clientX, event.clientY);
   });
   renderer.domElement.addEventListener("pointerup", (event) => {
-    if (pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > PART_PICK_DRAG_THRESHOLD) return;
+    state.cameraDragPointerId = null;
+    if (state.cameraPointerLocked) {
+      document.exitPointerLock?.();
+    }
+    if (state.cameraPointerMoved || pointerDown.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > PART_PICK_DRAG_THRESHOLD) return;
     pickPartFromViewport(event);
   });
+  renderer.domElement.addEventListener("pointercancel", () => {
+    state.cameraDragPointerId = null;
+    if (state.cameraPointerLocked) document.exitPointerLock?.();
+  });
+  document.addEventListener("pointerlockchange", handleCameraPointerLockChange);
+  document.addEventListener("mousemove", handleCameraPointerLockMove);
+  document.addEventListener("mouseup", () => {
+    state.cameraDragPointerId = null;
+    if (state.cameraPointerLocked) document.exitPointerLock?.();
+  });
+}
+
+function requestCameraPointerLock() {
+  if (document.pointerLockElement === renderer.domElement) return;
+  renderer.domElement.requestPointerLock?.();
+}
+
+function handleCameraPointerLockChange() {
+  state.cameraPointerLocked = document.pointerLockElement === renderer.domElement;
+  if (!state.cameraPointerLocked) state.cameraDragPointerId = null;
+}
+
+function handleCameraPointerLockMove(event) {
+  if (!state.cameraPointerLocked) return;
+  if (Math.hypot(event.movementX || 0, event.movementY || 0) > 0) state.cameraPointerMoved = true;
+  rotateCameraByPointerMovement(event.movementX || 0, event.movementY || 0);
+}
+
+function rotateCameraByPointerMovement(movementX, movementY) {
+  state.cameraOrbitYaw -= movementX * POINTER_LOCK_ROTATE_SPEED;
+  state.cameraOrbitPitch -= movementY * POINTER_LOCK_ROTATE_SPEED;
+  const transform = cameraOrbitTransformFromState();
+  camera.position.copy(controls.target).add(transform.offset);
+  camera.up.copy(transform.up);
+  camera.lookAt(controls.target);
+}
+
+function syncCameraOrbitState(force = false) {
+  const offset = camera.position.clone().sub(controls.target);
+  state.cameraOrbitDistance = Math.max(offset.length(), 0.0001);
+  if (state.cameraOrbitInitialized && !force) return;
+  const horizontal = Math.hypot(offset.x, offset.z);
+  state.cameraOrbitYaw = Math.atan2(offset.x, offset.z);
+  state.cameraOrbitPitch = Math.atan2(offset.y, horizontal);
+  state.cameraOrbitInitialized = true;
+}
+
+function cameraOrbitTransformFromState() {
+  const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), state.cameraOrbitYaw);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(yaw).normalize();
+  const pitch = new THREE.Quaternion().setFromAxisAngle(right, state.cameraOrbitPitch);
+  const offset = new THREE.Vector3(0, 0, state.cameraOrbitDistance).applyQuaternion(yaw).applyQuaternion(pitch);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(yaw).applyQuaternion(pitch).normalize();
+  return { offset, up };
 }
 
 function pickPartFromViewport(event) {
@@ -5866,14 +6821,14 @@ async function readEntryFiles(entry) {
 
 function applyOptions() {
   grid.visible = el.showGrid.checked;
-  if (state.skeletonLines) state.skeletonLines.visible = el.showSkeleton.checked;
+  if (state.skeletonLines) state.skeletonLines.visible = el.showSkeleton.checked && !isTrackBinModel();
   el.meshNameOverlay.hidden = !state.currentModel || !el.showMeshNames.checked;
   if (!el.meshNameOverlay.hidden) updateMeshNameLabels();
   if (state.bounds) state.bounds.visible = el.showBounds.checked;
   for (const entry of state.meshEntries) {
+    sanitizeMaterialTextures(entry.material);
     entry.material.wireframe = el.showWireframe.checked;
-    if (entry.material.userData.baseMap === undefined) entry.material.userData.baseMap = entry.material.map || null;
-    entry.material.map = el.showTextures.checked ? entry.material.userData.baseMap : null;
+    entry.material.map = el.showTextures.checked ? getMaterialBaseMap(entry.material) : null;
     entry.material.needsUpdate = true;
   }
   const normalLength = Number(el.normalScale.value);
@@ -6056,24 +7011,36 @@ function frameModel(bounds) {
   camera.near = Math.max(radius / 1000, 0.01);
   camera.far = radius * 20;
   camera.position.set(center.x, center.y + radius * 0.35, center.z + radius * 1.8);
+  camera.up.set(0, 1, 0);
   camera.updateProjectionMatrix();
   controls.update();
+  syncCameraOrbitState(true);
 }
 
 async function saveCurrentModel() {
   if (!state.currentModel) return;
+  el.saveModel.disabled = true;
   const saveSnapshot = captureSaveMutationSnapshot(state.currentModel);
   try {
+    validateModelForSave(state.currentModel);
     const zipEntries = [];
-    await bakeReplacementAtlas(state.currentModel, zipEntries);
-    const md9 = serializeMd9(createBakedModelForSave(state.currentModel));
-    const originalName = state.currentModel.name.split(/[\\/]/).pop() || "model.md9";
+    const isTrackBin = isTrackBinModel(state.currentModel);
+    const extension = isTrackBin ? ".bin" : ".md9";
+    const originalName = state.currentModel.name.split(/[\\/]/).pop() || `model${extension}`;
     const defaultBaseName = originalName.replace(/\.[^.]+$/, "") || "model";
-    const baseName = normalizeModelBaseName(window.prompt(t("modelNamePrompt"), defaultBaseName) || defaultBaseName);
-    for (const animation of state.currentModel.generatedAnimations || []) {
+    const chosenName = window.prompt(t("modelNamePrompt"), defaultBaseName);
+    if (chosenName === null) return;
+    const baseName = normalizeModelBaseName(chosenName || defaultBaseName);
+    setStatus("Preparing save...");
+    await nextFrame();
+    await bakeReplacementAtlas(state.currentModel, zipEntries);
+    const modelBytes = isTrackBin
+      ? serializeTrackBin(createBakedTrackModelForSave(state.currentModel))
+      : serializeMd9(createBakedModelForSave(state.currentModel));
+    for (const animation of isTrackBin ? [] : (state.currentModel.generatedAnimations || [])) {
       zipEntries.push({ name: sanitizeFilename(animation.name || "animation.ani"), data: new Blob([serializeAni(animation)], { type: "application/octet-stream" }) });
     }
-    zipEntries.unshift({ name: `${baseName}.md9`, data: new Blob([md9], { type: "application/octet-stream" }) });
+    zipEntries.unshift({ name: `${baseName}${extension}`, data: new Blob([modelBytes], { type: "application/octet-stream" }) });
     zipEntries.push(...getSaveDependencyEntries(state.currentModel, zipEntries));
     const zip = await createZipBlob(zipEntries);
     downloadBlob(zip, `${sanitizeFilename(baseName)}.zip`);
@@ -6083,11 +7050,21 @@ async function saveCurrentModel() {
     setStatus(t("saveFailed", { message: error.message }));
   } finally {
     restoreSaveMutationSnapshot(state.currentModel, saveSnapshot);
+    el.saveModel.disabled = !state.currentModel;
   }
 }
 
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+function validateModelForSave(model) {
+  if (!model || isTrackBinModel(model)) return;
+  validateParentHierarchy(model.submeshes);
+}
+
 function normalizeModelBaseName(name) {
-  return sanitizeFilename(String(name || "model").replace(/\.md9$/i, "").trim() || "model");
+  return sanitizeFilename(String(name || "model").replace(/\.(md9|bin)$/i, "").trim() || "model");
 }
 
 function createBakedModelForSave(model) {
@@ -6107,21 +7084,30 @@ function createBakedModelForSave(model) {
 }
 
 function createBakeHierarchyContext(model) {
+  validateParentHierarchy(model.submeshes);
   const localMatrices = model.submeshes.map((part) => md9ArrayToRenderMatrix(part.matrix));
   const worldMatrices = new Map();
   const savedWorldPositions = new Map();
+  const visitingWorld = new Set();
+  const visitingPosition = new Set();
   const getWorldMatrix = (index) => {
     if (worldMatrices.has(index)) return worldMatrices.get(index);
+    if (visitingWorld.has(index)) throw new Error("Parent hierarchy contains a cycle.");
+    visitingWorld.add(index);
     const part = model.submeshes[index];
     const parentWorld = part.parentId >= 0 ? getWorldMatrix(part.parentId) : new THREE.Matrix4();
     const world = new THREE.Matrix4().multiplyMatrices(parentWorld, localMatrices[index]);
     worldMatrices.set(index, world);
+    visitingWorld.delete(index);
     return world;
   };
   const getSavedWorldPosition = (index) => {
     if (savedWorldPositions.has(index)) return savedWorldPositions.get(index);
+    if (visitingPosition.has(index)) throw new Error("Parent hierarchy contains a cycle.");
+    visitingPosition.add(index);
     const position = new THREE.Vector3().setFromMatrixPosition(getWorldMatrix(index));
     savedWorldPositions.set(index, position);
+    visitingPosition.delete(index);
     return position;
   };
   return { getWorldMatrix, getSavedWorldPosition };
@@ -6182,6 +7168,11 @@ function createBakedPartForSave(part, index, context) {
 function captureSaveMutationSnapshot(model) {
   return {
     uvs: model.submeshes.map((part) => new Float32Array(part.uvs)),
+    trackParts: model.submeshes.map((part) => {
+      const snapshot = {};
+      copyTrackPartMetadata(part, snapshot);
+      return snapshot;
+    }),
     materials: model.materials.map((material) => ({
       atlasBaked: material.atlasBaked,
       textureName: material.textureName
@@ -6371,6 +7362,10 @@ function restoreSaveMutationSnapshot(model, snapshot) {
     model.submeshes[index].uvs = new Float32Array(uvs);
     if (state.meshEntries[index]) updatePartGeometry(index);
   }
+  for (const [index, metadata] of (snapshot.trackParts || []).entries()) {
+    if (!model.submeshes[index]) continue;
+    copyTrackPartMetadata(metadata, model.submeshes[index]);
+  }
   for (const [index, materialSnapshot] of snapshot.materials.entries()) {
     if (!model.materials[index]) continue;
     model.materials[index].textureName = materialSnapshot.textureName;
@@ -6390,7 +7385,9 @@ async function bakeReplacementAtlas(model, zipEntries = null) {
     if (!material || handled.has(material)) continue;
     if (!material.atlasSourceFile && !material.atlasSourceImage) continue;
     handled.add(material);
-    const textureName = material.textureName ? normalizeMd9TextureName(material.textureName) : makePartTextureName(part.name);
+    const textureName = material.textureName
+      ? normalizeModelTextureName(material.textureName, { defaultExt: ".dds", maxLength: isTrackBinModel(model) ? 63 : 31 })
+      : makePartTextureName(part.name);
     const canvas = isCanvasLike(material.atlasSourceImage)
       ? material.atlasSourceImage
       : (await buildTextureAtlas([{
@@ -6414,7 +7411,7 @@ async function downloadCanvasPng(canvas, filename) {
 
 async function downloadTextureAndAskName(canvas, defaultName) {
   const chosen = window.prompt(t("textureNamePrompt"), defaultName);
-  const textureName = normalizeMd9TextureName(chosen || defaultName);
+  const textureName = normalizeModelTextureName(chosen || defaultName, { defaultExt: ".dds", maxLength: isTrackBinModel() ? 63 : 31 });
   downloadBlob(await canvasToDxt3DdsBlob(canvas), textureName);
   return textureName;
 }
@@ -6422,7 +7419,7 @@ async function downloadTextureAndAskName(canvas, defaultName) {
 async function collectTextureAndAskName(canvas, defaultName, zipEntries) {
   if (!zipEntries) return downloadTextureAndAskName(canvas, defaultName);
   const chosen = window.prompt(t("textureNamePrompt"), defaultName);
-  const textureName = normalizeMd9TextureName(chosen || defaultName);
+  const textureName = normalizeModelTextureName(chosen || defaultName, { defaultExt: ".dds", maxLength: isTrackBinModel() ? 63 : 31 });
   zipEntries.push({ name: textureName, data: await canvasToDxt3DdsBlob(canvas) });
   return textureName;
 }
@@ -6434,8 +7431,22 @@ async function canvasToPngBlob(canvas) {
 }
 
 function normalizeMd9TextureName(name) {
-  const cleaned = String(name || "texture").split(/[\\/]/).pop().trim().replace(/\.dds$/i, "") || "texture";
-  return `${cleaned.slice(0, 27)}.dds`;
+  return normalizeModelTextureName(name, { defaultExt: ".dds", maxLength: 31 });
+}
+
+function normalizeModelTextureName(name, options = {}) {
+  const maxLength = options.maxLength || 31;
+  const defaultExt = options.defaultExt || "";
+  let cleaned = String(name || "texture").split(/[\\/]/).pop().trim() || "texture";
+  if (defaultExt && !/\.[^.\\/]+$/.test(cleaned)) cleaned += defaultExt;
+  if (cleaned.length <= maxLength) return cleaned;
+  const dot = cleaned.lastIndexOf(".");
+  if (dot > 0 && dot < cleaned.length - 1) {
+    const ext = cleaned.slice(dot);
+    const stem = cleaned.slice(0, dot);
+    return `${stem.slice(0, Math.max(1, maxLength - ext.length))}${ext.slice(0, maxLength - 1)}`.slice(0, maxLength);
+  }
+  return cleaned.slice(0, maxLength);
 }
 
 async function canvasToDxt3DdsBlob(canvas) {
@@ -6554,6 +7565,197 @@ function remapUvsForMaterial(model, materialId, source, atlasWidth, atlasHeight)
 
 function wrapUv(value) {
   return value - Math.floor(value);
+}
+
+function createBakedTrackModelForSave(model) {
+  const baked = {
+    ...model,
+    materials: model.materials.map((material) => ({
+      ...material,
+      diffuse: [...material.diffuse],
+      ambient: [...material.ambient],
+      specular: [...material.specular],
+      emissive: [...material.emissive],
+      trackTextureBytes: material.trackTextureBytes ? [...material.trackTextureBytes] : undefined
+    })),
+    submeshes: model.submeshes.map((part) => {
+      const bakedGeometry = bakeTrackPartGeometryForSave(part);
+      const positions = bakedGeometry.positions;
+      const normals = bakedGeometry.normals;
+      const clone = {
+        ...part,
+        matrix: new THREE.Matrix4().identity().toArray(),
+        boundingBox: boxToTrackBoundingArray(computeArrayBox(positions)),
+        localPositions: positions,
+        normals,
+        uvs: new Float32Array(part.uvs),
+        indices: new Uint16Array(part.indices),
+        parentId: -1
+      };
+      copyTrackPartMetadata(part, clone);
+      return clone;
+    })
+  };
+  updateGeneratedModelCounts(baked);
+  return baked;
+}
+
+function bakeTrackPartGeometryForSave(part) {
+  const transform = getTrackPartWorldTransform(part);
+  if (isIdentityMatrix(transform)) {
+    return {
+      positions: new Float32Array(part.localPositions),
+      normals: new Float32Array(part.normals)
+    };
+  }
+  const positions = new Float32Array(part.localPositions.length);
+  const normals = new Float32Array(part.normals.length);
+  const point = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const normalMatrix = new THREE.Matrix3().getNormalMatrix(transform);
+  for (let i = 0; i < part.localPositions.length; i += 3) {
+    point.set(part.localPositions[i], part.localPositions[i + 1], part.localPositions[i + 2]).applyMatrix4(transform);
+    positions[i] = point.x;
+    positions[i + 1] = point.y;
+    positions[i + 2] = point.z;
+  }
+  for (let i = 0; i < part.normals.length; i += 3) {
+    normal.set(part.normals[i], part.normals[i + 1], part.normals[i + 2]).applyMatrix3(normalMatrix).normalize();
+    normals[i] = normal.x;
+    normals[i + 1] = normal.y;
+    normals[i + 2] = normal.z;
+  }
+  return { positions, normals };
+}
+
+function isIdentityMatrix(matrix, epsilon = 1e-8) {
+  const elements = matrix?.elements || [];
+  for (let i = 0; i < 16; i++) {
+    const expected = i % 5 === 0 ? 1 : 0;
+    if (Math.abs((elements[i] ?? 0) - expected) > epsilon) return false;
+  }
+  return true;
+}
+
+function serializeTrackBin(model) {
+  const sections = collectTrackSectionsForSave(model);
+  const materialBytes = 4 + model.materials.length * 132;
+  let sectionBytes = 4;
+  for (const section of sections) {
+    sectionBytes += 12 + section.vertexCount * 32 + section.faceCount * 3 * 2 + 4 + section.parts.length * 28;
+  }
+  const buffer = new ArrayBuffer(materialBytes + sectionBytes);
+  const view = new DataView(buffer);
+  let offset = 0;
+  const writeInt = (value) => {
+    view.setInt32(offset, value, true);
+    offset += 4;
+  };
+  const writeUint16 = (value) => {
+    view.setUint16(offset, value, true);
+    offset += 2;
+  };
+  const writeFloat = (value) => {
+    view.setFloat32(offset, value, true);
+    offset += 4;
+  };
+  const writeTrackTextureName = (material) => {
+    const bytes = buildTrackTextureBytes(material);
+    new Uint8Array(buffer, offset, 64).set(bytes);
+    offset += 64;
+  };
+
+  writeInt(model.materials.length);
+  for (const material of model.materials) {
+    for (const value of material.diffuse) writeFloat(value);
+    for (const value of material.ambient) writeFloat(value);
+    for (const value of material.specular) writeFloat(value);
+    for (const value of material.emissive) writeFloat(value);
+    writeFloat(material.power);
+    writeTrackTextureName(material);
+  }
+
+  writeInt(sections.length);
+  for (const section of sections) {
+    writeFloat(section.angleRadians);
+    writeInt(section.vertexCount);
+    writeInt(section.faceCount);
+    for (const part of section.parts) {
+      for (let i = 0; i < part.vertexCount; i++) {
+        writeFloat(part.localPositions[i * 3]);
+        writeFloat(part.localPositions[i * 3 + 1]);
+        writeFloat(-part.localPositions[i * 3 + 2]);
+        writeFloat(part.normals[i * 3]);
+        writeFloat(part.normals[i * 3 + 1]);
+        writeFloat(-part.normals[i * 3 + 2]);
+        writeFloat(part.uvs[i * 2]);
+        writeFloat(part.uvs[i * 2 + 1]);
+      }
+    }
+    for (const part of section.parts) {
+      for (const index of part.indices) writeUint16(index + part.trackVertexStart);
+    }
+    writeInt(section.parts.length);
+    for (const part of section.parts) {
+      writeInt(part.materialId);
+      writeInt(part.vertexCount);
+      writeInt(part.faceCount);
+      writeInt(part.trackVertexStart);
+      writeInt(part.trackAlphaFlag ?? 0);
+      writeInt(part.trackCullFlag ?? 1);
+      writeInt(part.trackSentinel ?? TRACK_BIN_RANGE_SENTINEL);
+    }
+  }
+  return buffer;
+}
+
+function collectTrackSectionsForSave(model) {
+  const sectionCount = Math.max(32, ...model.submeshes.map((part) => Number.isInteger(part.trackSectionId) ? part.trackSectionId + 1 : 1));
+  const sections = Array.from({ length: sectionCount }, (_, index) => ({
+    angleRadians: model.trackSections?.[index]?.angleRadians ?? THREE.MathUtils.degToRad(5.625 + index * 11.25),
+    parts: []
+  }));
+  for (const part of model.submeshes) {
+    const sectionId = Number.isInteger(part.trackSectionId) && part.trackSectionId >= 0 ? part.trackSectionId : 0;
+    sections[sectionId].parts.push(part);
+  }
+  for (const [sectionId, section] of sections.entries()) {
+    section.parts.sort((a, b) => (a.trackIndexId ?? 0) - (b.trackIndexId ?? 0));
+    let vertexStart = 0;
+    section.faceCount = 0;
+    for (const [trackIndex, part] of section.parts.entries()) {
+      part.trackSectionId = sectionId;
+      part.trackIndexId = trackIndex;
+      part.name = makeTrackPartName(sectionId, trackIndex);
+      part.trackVertexStart = vertexStart;
+      vertexStart += part.vertexCount;
+      section.faceCount += part.faceCount;
+    }
+    section.vertexCount = vertexStart;
+    if (section.vertexCount > 65535) throw new Error(t("replacementTooLarge"));
+  }
+  return sections;
+}
+
+function buildTrackTextureBytes(material) {
+  const existing = material.trackTextureBytes ? Uint8Array.from(material.trackTextureBytes.slice(0, 64)) : null;
+  if (existing && readTextureNameFromBytes(existing) === (material.textureName || "")) return existing;
+  const bytes = new Uint8Array(64);
+  bytes.fill(0xcc);
+  const text = String(material.textureName || "");
+  const length = Math.min(text.length, 63);
+  for (let i = 0; i < length; i++) bytes[i] = text.charCodeAt(i) & 0x7f;
+  bytes[length] = 0;
+  return bytes;
+}
+
+function readTextureNameFromBytes(bytes) {
+  let text = "";
+  for (const byte of bytes) {
+    if (byte === 0 || byte === 0xcc) break;
+    if (byte >= 32 && byte < 127) text += String.fromCharCode(byte);
+  }
+  return text.trim();
 }
 
 function serializeMd9(model) {
@@ -6712,6 +7914,7 @@ function disposeCurrent() {
   el.meshNameOverlay.hidden = true;
   updateHighlightInfo();
   state.boneNodes = new Map();
+  if (!state.currentModel) updateReferenceScale();
   if (el.duplicatePart) el.duplicatePart.disabled = true;
   if (el.deletePart) el.deletePart.disabled = true;
 }
@@ -6726,8 +7929,10 @@ function disposeObject(root) {
       const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
       for (const material of objectMaterials) {
         materials.add(material);
-        if (material.map) textures.add(material.map);
-        if (material.userData?.baseMap) textures.add(material.userData.baseMap);
+        const map = getRenderableTexture(material.map);
+        const baseMap = getRenderableTexture(material.userData?.baseMap);
+        if (map) textures.add(map);
+        if (baseMap) textures.add(baseMap);
       }
     }
   });
@@ -6786,7 +7991,7 @@ function animate() {
   updateMeshNameLabels();
   if (state.highlightedHelper) {
     state.highlightedHelper.visible = state.meshEntries[state.highlightedPartIndex]?.mesh?.visible ?? false;
-    state.highlightedHelper.update();
+    state.highlightedHelper.update?.();
     updateHighlightInfo();
   }
   controls.update();
@@ -6806,6 +8011,8 @@ function updateKeyboardCamera(deltaSeconds) {
   if (state.cameraKeys.has("s")) move.sub(forward);
   if (state.cameraKeys.has("d")) move.add(right);
   if (state.cameraKeys.has("a")) move.sub(right);
+  if (state.cameraKeys.has("e")) move.y += 1;
+  if (state.cameraKeys.has("q")) move.y -= 1;
   if (move.lengthSq() < 0.0001) return;
   const distance = Math.max(camera.position.distanceTo(controls.target), 1);
   move.normalize().multiplyScalar(distance * 0.9 * deltaSeconds);

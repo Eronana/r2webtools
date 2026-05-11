@@ -27,7 +27,7 @@
               <button type="button" data-language="es">ES</button>
             </div>
           </div>
-          <div class="version-text">Build 2026.05.10.0903</div>
+          <div class="version-text">Build 2026.05.11.0336</div>
           <div class="contact-text">交流QQ群: 1094233945</div>
         </div>
         <div id="highlightInfo" class="highlight-info" hidden></div>
@@ -91,6 +91,11 @@
             <input id="targetModelHeight" type="number" value="280" min="0.001" step="0.1" />
             <button id="scaleModelHeight" type="button" disabled data-i18n="scaleToHeight">Scale</button>
           </div>
+          <div class="global-scale-row">
+            <label for="modelScaleFactor" data-i18n="scaleFactor">Reference scale</label>
+            <input id="modelScaleFactor" type="number" value="1" min="0.0001" step="0.1" />
+            <button id="scaleModelFactor" type="button" disabled data-i18n="applyScale">Apply</button>
+          </div>
         </div>
 
         <div class="panel-block">
@@ -142,7 +147,7 @@
           <label for="modelSelect" data-i18n="currentModel">Current model</label>
           <div class="select-row">
             <select id="modelSelect" disabled>
-              <option value="" data-i18n="noMd9Loaded">No MD9 loaded</option>
+              <option value="" data-i18n="noMd9Loaded">No model loaded</option>
             </select>
             <button id="clearModels" type="button" disabled data-i18n="clear">Clear</button>
             <button id="saveModel" type="button" disabled data-i18n="saveMd9">Save MD9</button>
@@ -242,8 +247,8 @@
             <input id="editName" type="text" />
             <label for="editMaterial" data-i18n="material">Material</label>
             <select id="editMaterial"></select>
-            <label for="editParent" data-i18n="parentPart">Parent</label>
-            <div class="parent-edit-control">
+            <label id="editParentLabel" for="editParent" data-i18n="parentPart">Parent</label>
+            <div id="editParentControl" class="parent-edit-control">
               <select id="editParent"></select>
               <label class="switch-row compact-switch">
                 <input id="keepWorldOnParentChange" type="checkbox" checked />
@@ -252,9 +257,11 @@
             </div>
           </div>
 
+          <div id="trackBinInfo" class="track-bin-info" hidden></div>
+
           <div class="transform-head">
             <div class="submesh-title" data-i18n="transform">Transform</div>
-            <label class="switch-row">
+            <label id="matrixModeControl" class="switch-row">
               <input id="matrixMode" type="checkbox" />
               <span data-i18n="matrixMode">Matrix</span>
             </label>
@@ -272,8 +279,8 @@
           <small id="replaceHint" data-i18n="replaceHint">Drop obj/mtl or glb/gltf/bin with textures here</small>
         </div>
       </aside>
-      <div id="status" data-i18n="chooseMd9">Choose an MD9 file</div>
-      <div id="dropOverlay" data-i18n="dropOverlay">Drop md9 / ani / obj / glb / gltf / texture files</div>
+      <div id="status" data-i18n="chooseMd9">Choose an MD9 or track bin file</div>
+      <div id="dropOverlay" data-i18n="dropOverlay">Drop md9 / bin / ani / obj / glb / gltf / texture files</div>
       <dialog id="helpDialog" class="help-dialog">
         <div class="help-dialog-head">
           <strong data-i18n="helpTitle">Help</strong>
