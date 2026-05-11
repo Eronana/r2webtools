@@ -821,6 +821,184 @@ input[type="checkbox"] {
   cursor: move;
 }
 
+.ani-slider-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  width: var(--ani-track-label-width);
+  min-width: 0;
+  padding-right: 4px;
+}
+
+.ani-slider-actions button {
+  min-width: 0;
+  min-height: 22px;
+  height: 22px;
+  margin-right: 0;
+  border-radius: 4px;
+  padding: 0 4px;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ani-batch-editor {
+  position: absolute;
+  z-index: 7;
+  left: 12px;
+  bottom: calc(100% + 12px);
+  width: min(720px, calc(100vw - var(--panel-width, 420px) - 48px));
+  min-width: min(560px, calc(100vw - var(--panel-width, 420px) - 48px));
+  max-width: calc(100vw - var(--panel-width, 420px) - 48px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgb(20 24 29 / 98%);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 38%);
+  padding: 10px;
+  cursor: move;
+}
+
+.ani-batch-editor[hidden] {
+  display: none;
+}
+
+.ani-batch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ani-batch-head .ani-key-close {
+  position: static;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.ani-batch-track-list {
+  --ani-key-part-list-max-height: 236px;
+  grid-template-columns: minmax(0, 1fr);
+  padding-right: 4px;
+}
+
+.ani-batch-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(260px, 1.1fr);
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  align-items: start;
+}
+
+.ani-batch-tools {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ani-batch-select-actions {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: end;
+  gap: 6px;
+}
+
+.ani-batch-select-actions button {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.ani-batch-time-row,
+.ani-batch-paste-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ani-batch-paste-row {
+  grid-template-columns: minmax(130px, 1fr) auto 64px;
+  align-items: center;
+}
+
+.ani-batch-time-row label,
+.ani-batch-paste-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ani-batch-time-row label span,
+.ani-batch-paste-row label span {
+  flex: 0 0 auto;
+}
+
+.ani-batch-time-row input,
+.ani-batch-paste-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.ani-batch-paste-mode {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.ani-batch-paste-mode label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 6px;
+  background: rgb(255 255 255 / 4%);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ani-batch-paste-mode label:has(input:checked) {
+  border-color: var(--accent);
+  background: rgb(86 160 255 / 20%);
+}
+
+.ani-batch-paste-mode input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ani-batch-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ani-batch-actions button,
+.ani-batch-paste-row button {
+  min-height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
 .ani-key-editor.disabled {
   opacity: 0.64;
 }

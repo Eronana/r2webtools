@@ -27,7 +27,7 @@
               <button type="button" data-language="es">ES</button>
             </div>
           </div>
-          <div class="version-text">Build 2026.05.11.1117</div>
+          <div class="version-text">Build 2026.05.11.1508</div>
           <div class="contact-text">交流QQ群: 1094233945</div>
         </div>
         <div id="highlightInfo" class="highlight-info" hidden></div>
@@ -48,7 +48,10 @@
             </div>
           </div>
           <div class="ani-slider-row">
-            <button id="aniSelectTracks" type="button" data-i18n="selectTracks">Select tracks</button>
+            <div class="ani-slider-actions">
+              <button id="aniSelectTracks" type="button" data-i18n="selectTracks">Select tracks</button>
+              <button id="aniBatchEdit" type="button" data-i18n="batchEdit">Batch edit</button>
+            </div>
             <div id="aniSliderTrack" class="ani-slider-track" role="slider" aria-label="Animation time" tabindex="0">
               <span id="aniSliderThumb" class="ani-slider-thumb"></span>
             </div>
@@ -75,6 +78,39 @@
                 <button id="aniCloseKeyEditor" class="icon-button ani-key-close" type="button" aria-label="Close">×</button>
               </div>
               <div id="aniTransformEditor" class="ani-transform-editor"></div>
+            </div>
+          </div>
+          <div id="aniBatchEditor" class="ani-batch-editor" hidden>
+            <div class="ani-batch-head">
+              <div class="ani-editor-title" data-i18n="batchEdit">Batch edit</div>
+              <button id="aniBatchClose" class="icon-button ani-key-close" type="button" aria-label="Close">×</button>
+            </div>
+            <div class="ani-batch-body">
+              <div id="aniBatchTrackList" class="ani-key-part-list ani-batch-track-list"></div>
+              <div class="ani-batch-tools">
+                <div class="ani-batch-select-actions">
+                  <button id="aniBatchSelectAll" type="button" data-i18n="selectAll">Select all</button>
+                  <button id="aniBatchSelectNone" type="button" data-i18n="selectNone">Select none</button>
+                </div>
+                <div class="ani-batch-time-row">
+                  <label><span data-i18n="rangeStart">Start</span><input id="aniBatchStartTime" type="number" value="0" step="0.01" /></label>
+                  <label><span data-i18n="rangeEnd">End</span><input id="aniBatchEndTime" type="number" value="0" step="0.01" /></label>
+                </div>
+                <div class="ani-batch-actions">
+                  <button id="aniBatchCopy" type="button" data-i18n="copy">Copy</button>
+                  <button id="aniBatchCut" type="button" data-i18n="delete">Delete</button>
+                  <button id="aniBatchDelete" type="button" data-i18n="clear">Clear</button>
+                </div>
+                <div class="ani-batch-paste-row">
+                  <label><span data-i18n="pasteTime">Paste at</span><input id="aniBatchPasteTime" type="number" value="0" step="0.01" /></label>
+                  <div id="aniBatchPasteMode" class="ani-batch-paste-mode" role="radiogroup" aria-label="Paste mode">
+                    <label><input type="radio" name="aniBatchPasteMode" value="merge" checked /><span data-i18n="pasteMerge">Merge</span></label>
+                    <label><input type="radio" name="aniBatchPasteMode" value="overwrite" /><span data-i18n="pasteOverwrite">Overwrite</span></label>
+                    <label><input type="radio" name="aniBatchPasteMode" value="insert" /><span data-i18n="pasteInsert">Insert</span></label>
+                  </div>
+                  <button id="aniBatchPaste" type="button" data-i18n="paste">Paste</button>
+                </div>
+              </div>
             </div>
           </div>
           <dialog id="aniTrackDialog" class="ani-track-dialog">
@@ -148,6 +184,10 @@
               <label for="skinSleeveLength" data-i18n="sleeveLength">Length</label>
               <input id="skinSleeveLength" type="number" value="0.12" min="0.01" max="1" step="0.01" />
             </div>
+            <label class="switch-row">
+              <input id="skinFreshImport" type="checkbox" checked />
+              <span data-i18n="freshImport">Fresh import</span>
+            </label>
           </div>
           <label class="file-button">
             <input id="skinImportInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga,.dds" multiple />

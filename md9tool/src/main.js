@@ -29,6 +29,7 @@ const el = {
   skinRemoteK: document.querySelector("#skinRemoteK"),
   skinJointSleeves: document.querySelector("#skinJointSleeves"),
   skinSleeveLength: document.querySelector("#skinSleeveLength"),
+  skinFreshImport: document.querySelector("#skinFreshImport"),
   saveModel: document.querySelector("#saveModel"),
   saveAnimation: document.querySelector("#saveAnimation"),
   modelSelect: document.querySelector("#modelSelect"),
@@ -53,6 +54,7 @@ const el = {
   aniSnapKeys: document.querySelector("#aniSnapKeys"),
   aniSnapStep: document.querySelector("#aniSnapStep"),
   aniSelectTracks: document.querySelector("#aniSelectTracks"),
+  aniBatchEdit: document.querySelector("#aniBatchEdit"),
   aniTrackDialog: document.querySelector("#aniTrackDialog"),
   aniTrackList: document.querySelector("#aniTrackList"),
   aniKeyEditor: document.querySelector("#aniKeyEditor"),
@@ -63,6 +65,19 @@ const el = {
   aniKeyInterval: document.querySelector("#aniKeyInterval"),
   aniInsertKeyAfter: document.querySelector("#aniInsertKeyAfter"),
   aniCloseKeyEditor: document.querySelector("#aniCloseKeyEditor"),
+  aniBatchEditor: document.querySelector("#aniBatchEditor"),
+  aniBatchClose: document.querySelector("#aniBatchClose"),
+  aniBatchTrackList: document.querySelector("#aniBatchTrackList"),
+  aniBatchStartTime: document.querySelector("#aniBatchStartTime"),
+  aniBatchEndTime: document.querySelector("#aniBatchEndTime"),
+  aniBatchSelectAll: document.querySelector("#aniBatchSelectAll"),
+  aniBatchSelectNone: document.querySelector("#aniBatchSelectNone"),
+  aniBatchCopy: document.querySelector("#aniBatchCopy"),
+  aniBatchCut: document.querySelector("#aniBatchCut"),
+  aniBatchDelete: document.querySelector("#aniBatchDelete"),
+  aniBatchPasteTime: document.querySelector("#aniBatchPasteTime"),
+  aniBatchPasteMode: document.querySelector("#aniBatchPasteMode"),
+  aniBatchPaste: document.querySelector("#aniBatchPaste"),
   aniKeyTransformTitle: document.querySelector("#aniKeyTransformTitle"),
   aniKeyTimeInput: document.querySelector("#aniKeyTimeInput"),
   aniTransformEditor: document.querySelector("#aniTransformEditor"),
@@ -198,6 +213,15 @@ const I18N = {
     snapKeys: "Snap",
     rangeStart: "Start",
     rangeEnd: "End",
+    selectAll: "Select all",
+    selectNone: "Select none",
+    copy: "Copy",
+    cut: "Cut",
+    paste: "Paste",
+    pasteTime: "Paste at",
+    pasteMerge: "Merge",
+    pasteOverwrite: "Overwrite",
+    pasteInsert: "Insert",
     addKey: "Add key",
     selectTracks: "Select tracks",
     time: "Time",
@@ -251,6 +275,7 @@ const I18N = {
     cleanRemoteFaces: "Clean remote",
     jointSleeves: "Smooth joints",
     sleeveLength: "Length",
+    freshImport: "Fresh import",
     importGltfButton: "Import GLB / GLTF as MD9",
     partName: "Name",
     batchExport: "Export ZIP",
@@ -349,6 +374,15 @@ const I18N = {
     snapKeys: "吸附",
     rangeStart: "起点",
     rangeEnd: "终点",
+    selectAll: "全选",
+    selectNone: "全不选",
+    copy: "复制",
+    cut: "剪切",
+    paste: "粘贴",
+    pasteTime: "粘贴到",
+    pasteMerge: "合并",
+    pasteOverwrite: "覆盖",
+    pasteInsert: "插入",
     addKey: "添加关键帧",
     selectTracks: "选择轨道",
     time: "时间",
@@ -402,6 +436,7 @@ const I18N = {
     cleanRemoteFaces: "清理远面",
     jointSleeves: "平滑连接",
     sleeveLength: "长度",
+    freshImport: "全新导入",
     importGltfButton: "导入 GLB / GLTF 为 MD9",
     partName: "名称",
     batchExport: "批量导出",
@@ -500,6 +535,15 @@ const I18N = {
     snapKeys: "Ajustar",
     rangeStart: "Inicio",
     rangeEnd: "Fin",
+    selectAll: "Todo",
+    selectNone: "Nada",
+    copy: "Copiar",
+    cut: "Cortar",
+    paste: "Pegar",
+    pasteTime: "Pegar en",
+    pasteMerge: "Combinar",
+    pasteOverwrite: "Sobrescribir",
+    pasteInsert: "Insertar",
     addKey: "Agregar key",
     selectTracks: "Elegir pistas",
     time: "Tiempo",
@@ -553,6 +597,7 @@ const I18N = {
     cleanRemoteFaces: "Limpiar remoto",
     jointSleeves: "Suavizar juntas",
     sleeveLength: "Longitud",
+    freshImport: "Importar nuevo",
     importGltfButton: "Importar GLB / GLTF a MD9",
     partName: "Nombre",
     batchExport: "Exportar ZIP",
@@ -696,11 +741,16 @@ const state = {
   visibleAniTracks: null,
   aniTrackSelectionTouched: false,
   aniTimelineKeyHits: [],
+  aniPartKeyTimeCache: new Map(),
+  aniTimelineDrawRequest: 0,
   draggingAniEditor: false,
   draggingAniRangeHandle: "",
   draggingAniRangeMove: false,
   aniRangeMoveStartTime: 0,
   aniRangeMoveStartRange: { start: 0, end: 0 },
+  aniBatchSelectedTracks: new Set(),
+  aniBatchClipboard: null,
+  draggingAniBatchEditor: false,
   draggingAniTimelineHeight: false,
   draggingAniSlider: false,
   aniTimelineResizeStartY: 0,
@@ -788,6 +838,14 @@ el.autoPlay.addEventListener("change", () => {
   }
 });
 el.aniSelectTracks.addEventListener("click", openAniTrackDialog);
+el.aniBatchEdit.addEventListener("click", openAniBatchEditor);
+el.aniBatchClose.addEventListener("click", closeAniBatchEditor);
+el.aniBatchSelectAll.addEventListener("click", selectAllAniBatchTracks);
+el.aniBatchSelectNone.addEventListener("click", clearAniBatchTracks);
+el.aniBatchCopy.addEventListener("click", () => handleAniBatchRangeOperation("copy"));
+el.aniBatchCut.addEventListener("click", () => handleAniBatchRangeOperation("remove"));
+el.aniBatchDelete.addEventListener("click", () => handleAniBatchRangeOperation("delete"));
+el.aniBatchPaste.addEventListener("click", pasteAniBatchClipboard);
 el.aniDeleteKey.addEventListener("click", deleteSelectedAniKey);
 el.aniPrevKey.addEventListener("click", () => selectAdjacentAniKey(-1));
 el.aniNextKey.addEventListener("click", () => selectAdjacentAniKey(1));
@@ -797,7 +855,7 @@ el.aniTransformEditor.addEventListener("input", handleAniTransformEditorInput);
 el.aniKeyTimeInput.addEventListener("change", applyAniKeyTimeInput);
 el.aniSnapKeys.addEventListener("input", updateAniSnapGrid);
 el.aniSnapStep.addEventListener("input", updateAniSnapGrid);
-el.aniTimeline.addEventListener("scroll", drawAniTimelineCanvas);
+el.aniTimeline.addEventListener("scroll", scheduleAniTimelineCanvasDraw);
 el.aniTimeline.addEventListener("pointermove", updateAniTimelineHoverCursor);
 el.aniTimeline.addEventListener("pointerleave", () => {
   el.aniTimeline.style.cursor = "";
@@ -810,6 +868,7 @@ el.aniTimeSlider.addEventListener("input", () => {
 });
 installAniTimelineHandlers();
 installAniKeyEditorDrag();
+installAniBatchEditorDrag();
 installAniTimelineResize();
 installAniSliderHandlers();
 installAniRangeBarHandlers();
@@ -1103,6 +1162,9 @@ async function loadSelectedAnimation(id) {
     state.draggingAniPartName = "";
     state.visibleAniTracks = null;
     state.aniTrackSelectionTouched = false;
+    state.aniBatchSelectedTracks = new Set();
+    invalidateAniKeyTimeCache();
+    el.aniBatchEditor.hidden = true;
     el.animationSelect.value = "";
     el.saveAnimation.disabled = true;
     resetPose();
@@ -1117,6 +1179,7 @@ async function loadSelectedAnimation(id) {
   try {
     if (!item.animation) item.animation = parseAni(await item.file.arrayBuffer(), item.label);
     state.currentAnimation = item.animation;
+    invalidateAniKeyTimeCache();
     state.animationStartTime = getNow();
     state.animationFrame = 0;
     state.aniRangeStart = 0;
@@ -1124,6 +1187,8 @@ async function loadSelectedAnimation(id) {
     state.selectedAniKeyTime = null;
     state.selectedAniPartName = "";
     state.draggingAniPartName = "";
+    state.aniBatchSelectedTracks = new Set();
+    el.aniBatchEditor.hidden = true;
     initializeVisibleAniTracks();
     el.saveAnimation.disabled = false;
     applyAnimation(0);
@@ -1230,6 +1295,10 @@ function clearActiveAnimationForStaticModel() {
   state.draggingAniPartName = "";
   state.visibleAniTracks = null;
   state.aniTrackSelectionTouched = false;
+  state.aniBatchSelectedTracks = new Set();
+  state.aniBatchClipboard = null;
+  invalidateAniKeyTimeCache();
+  if (el.aniBatchEditor) el.aniBatchEditor.hidden = true;
 }
 
 function parseMd9(buffer, name, baseDir) {
@@ -4095,6 +4164,11 @@ async function importSkinnedGltfFiles(files) {
       jointSleeves: el.skinJointSleeves.checked,
       sleeveLength: Number(el.skinSleeveLength.value) || 0.12
     });
+    if (state.currentModel && !isTrackBinModel() && !el.skinFreshImport.checked) {
+      await appendImportedMd9Model(model);
+      setStatus(t("importedSkinnedGltf", { name: modelFile.name, parts: model.submeshes.length }));
+      return;
+    }
     const id = `generated:${model.name}:${Date.now()}`;
     state.md9Files.push({ id, label: model.name, model, format: MD9_FORMAT });
     state.currentMd9Id = id;
@@ -4123,6 +4197,93 @@ function addGeneratedAnimationsToState(model) {
       modelId: state.currentMd9Id
     });
   }
+}
+
+async function appendImportedMd9Model(importedModel) {
+  const target = state.currentModel;
+  if (!target || isTrackBinModel(target)) return;
+  pushUndoSnapshot();
+  const materialOffset = target.materials.length;
+  const partOffset = target.submeshes.length;
+  const usedNames = new Set(target.submeshes.map((part) => part.name.toLowerCase()));
+  const nameMap = new Map();
+
+  for (const material of importedModel.materials) {
+    target.materials.push(cloneMaterialState(material));
+  }
+  for (const part of importedModel.submeshes) {
+    const clone = clonePartForSnapshot(part);
+    const uniqueName = makeUniqueAppendedPartName(part.name, usedNames);
+    usedNames.add(uniqueName.toLowerCase());
+    nameMap.set(part.name, uniqueName);
+    clone.name = uniqueName;
+    clone.materialId = materialOffset + (part.materialId || 0);
+    clone.parentId = part.parentId >= 0 ? partOffset + part.parentId : -1;
+    clone.initialState = clonePartState(clone);
+    target.submeshes.push(clone);
+  }
+
+  const usedAnimationNames = new Set((target.generatedAnimations || []).map((animation) => String(animation.name || "").toLowerCase()));
+  const importedAnimations = cloneImportedAnimations(importedModel.generatedAnimations || [], nameMap, usedAnimationNames);
+  target.generatedAnimations = [...(target.generatedAnimations || []), ...importedAnimations];
+  updateGeneratedModelCounts(target);
+  addGeneratedAnimationsToState(target);
+  state.restoringHistory = true;
+  try {
+    await showModel(target, target.name);
+  } finally {
+    state.restoringHistory = false;
+    updateHistoryButtons();
+  }
+  state.editIndex = partOffset < target.submeshes.length ? partOffset : -1;
+  if (state.editIndex >= 0) {
+    setHighlightedPart(state.editIndex);
+    buildTransformEditor(target.submeshes[state.editIndex]);
+    setEditorEnabled(true);
+  }
+  if (state.currentAnimation) applyAnimation(state.animationFrame);
+}
+
+function makeUniqueAppendedPartName(name, usedNames) {
+  const base = sanitizeFilename(name || "imported_part").slice(0, 31) || "imported_part";
+  let candidate = base;
+  let suffix = 1;
+  while (usedNames.has(candidate.toLowerCase())) {
+    candidate = sanitizeFilename(`${base}_${suffix++}`).slice(0, 31) || `imported_${suffix}`;
+  }
+  return candidate;
+}
+
+function cloneImportedAnimations(animations, nameMap, usedNames = new Set()) {
+  return animations.map((animation) => ({
+    name: makeUniqueAnimationName(animation.name || "animation.ani", usedNames),
+    duration: animation.duration,
+    tracks: new Map([...animation.tracks.entries()].map(([partName, track]) => [
+      nameMap.get(partName) || partName,
+      {
+        boneName: nameMap.get(track.boneName) || nameMap.get(partName) || track.boneName,
+        positions: cloneAniKeyArray(track.positions),
+        rotations: cloneAniKeyArray(track.rotations),
+        scales: cloneAniKeyArray(track.scales)
+      }
+    ]))
+  }));
+}
+
+function makeUniqueAnimationName(name, usedNames) {
+  const hasExtension = /\.ani$/i.test(name);
+  const base = sanitizeFilename(String(name || "animation").replace(/\.ani$/i, "")) || "animation";
+  let candidate = hasExtension ? `${base}.ani` : base;
+  let suffix = 2;
+  while (usedNames.has(candidate.toLowerCase())) {
+    candidate = `${base}_${suffix++}${hasExtension ? ".ani" : ""}`;
+  }
+  usedNames.add(candidate.toLowerCase());
+  return candidate;
+}
+
+function cloneAniKeyArray(keys = []) {
+  return keys.map((key) => ({ time: key.time, value: cloneAniKeyValue(key.value) }));
 }
 
 async function replacePartWithModelFiles(partIndex, modelFile, files, options = {}) {
@@ -6305,6 +6466,10 @@ function clearAnimations() {
   state.aniRangeEnd = 0;
   state.selectedAniKeyTime = null;
   state.selectedAniPartName = "";
+  state.aniBatchSelectedTracks = new Set();
+  state.aniBatchClipboard = null;
+  invalidateAniKeyTimeCache();
+  el.aniBatchEditor.hidden = true;
   el.saveAnimation.disabled = true;
   updateAnimationSelect();
   updateFrameControls();
@@ -6330,6 +6495,7 @@ function updateFrameControls() {
   el.aniTimelinePanel.hidden = !state.currentAnimation;
   el.aniTimelinePanel.classList.toggle("disabled", !state.currentAnimation);
   el.aniSelectTracks.disabled = !state.currentAnimation;
+  el.aniBatchEdit.disabled = !state.currentAnimation;
   el.aniTimeSlider.disabled = !state.currentAnimation;
   el.aniTimeSlider.min = formatNumber(range.start);
   el.aniTimeSlider.max = formatNumber(Math.max(range.end, range.start + 0.0001));
@@ -6524,11 +6690,13 @@ function startAniRangeDrag(event, handle) {
 }
 
 function stopAniRangeDrag() {
+  const wasDragging = Boolean(state.draggingAniRangeHandle || state.draggingAniRangeMove);
   state.draggingAniRangeHandle = "";
   state.draggingAniRangeMove = false;
   el.aniRangeStartHandle.classList.remove("active");
   el.aniRangeEndHandle.classList.remove("active");
   el.aniRangeFill.classList.remove("dragging");
+  if (wasDragging) updateFrameControls();
 }
 
 function startAniRangeMove(event) {
@@ -6553,7 +6721,7 @@ function moveAniRangeSelection(time) {
     el.autoPlay.checked = false;
     applyAnimation(state.aniRangeStart);
   }
-  updateFrameControls();
+  updateAniRangeInteraction();
 }
 
 function getNearestAniRangeHandle(event) {
@@ -6572,7 +6740,20 @@ function setAniRangeHandleFromTime(handle, time) {
     el.autoPlay.checked = false;
     applyAnimation(handle === "end" ? state.aniRangeEnd : state.aniRangeStart);
   }
-  updateFrameControls();
+  updateAniRangeInteraction();
+}
+
+function updateAniRangeInteraction() {
+  const range = getAniRange();
+  const percent = range.length > 0 ? (state.animationFrame - range.start) / range.length * 100 : 0;
+  el.frameLabel.textContent = `${formatNumber(state.animationFrame)} / ${formatNumber(state.currentAnimation?.duration || 0)}`;
+  el.aniTimeSlider.min = formatNumber(range.start);
+  el.aniTimeSlider.max = formatNumber(Math.max(range.end, range.start + 0.0001));
+  el.aniTimeSlider.value = formatNumber(Math.max(range.start, Math.min(range.end, state.animationFrame)));
+  updateAniSliderVisual(state.animationFrame);
+  updateAniRangeBar();
+  updateAniTimelineCursor(percent, false);
+  scheduleAniTimelineCanvasDraw();
 }
 
 function rangeBarTimeFromEvent(event) {
@@ -6600,11 +6781,15 @@ function installAniTimelineHandlers() {
     state.draggingAniKeyTime = nextTime;
     state.selectedAniKeyTime = nextTime;
     applyAnimation(nextTime);
-    updateFrameControls();
+    updateAniTimelinePlayback();
+    scheduleAniTimelineCanvasDraw();
+    renderAniKeyEditor();
   });
   window.addEventListener("pointerup", () => {
+    const wasDragging = state.draggingAniKeyTime != null;
     state.draggingAniKeyTime = null;
     state.draggingAniPartName = "";
+    if (wasDragging) updateFrameControls();
   });
   window.addEventListener("pointercancel", () => {
     state.draggingAniKeyTime = null;
@@ -6639,6 +6824,36 @@ function installAniKeyEditorDrag() {
   };
   el.aniKeyEditor.addEventListener("pointerup", stopDrag);
   el.aniKeyEditor.addEventListener("pointercancel", stopDrag);
+}
+
+function installAniBatchEditorDrag() {
+  el.aniBatchEditor.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("input, button, select, textarea, label")) return;
+    state.draggingAniBatchEditor = true;
+    const panelRect = el.aniTimelinePanel.getBoundingClientRect();
+    const editorRect = el.aniBatchEditor.getBoundingClientRect();
+    state.aniEditorDragOffset = {
+      x: event.clientX - editorRect.left,
+      y: event.clientY - editorRect.top
+    };
+    el.aniBatchEditor.style.left = `${editorRect.left - panelRect.left}px`;
+    el.aniBatchEditor.style.top = `${editorRect.top - panelRect.top}px`;
+    el.aniBatchEditor.style.bottom = "auto";
+    el.aniBatchEditor.setPointerCapture(event.pointerId);
+  });
+  el.aniBatchEditor.addEventListener("pointermove", (event) => {
+    if (!state.draggingAniBatchEditor) return;
+    const panelRect = el.aniTimelinePanel.getBoundingClientRect();
+    const x = event.clientX - panelRect.left - state.aniEditorDragOffset.x;
+    const y = event.clientY - panelRect.top - state.aniEditorDragOffset.y;
+    el.aniBatchEditor.style.left = `${x}px`;
+    el.aniBatchEditor.style.top = `${y}px`;
+  });
+  const stopDrag = () => {
+    state.draggingAniBatchEditor = false;
+  };
+  el.aniBatchEditor.addEventListener("pointerup", stopDrag);
+  el.aniBatchEditor.addEventListener("pointercancel", stopDrag);
 }
 
 function installAniTimelineResize() {
@@ -6719,6 +6934,10 @@ function getAniSnapStep() {
 }
 
 function drawAniTimelineCanvas() {
+  if (state.aniTimelineDrawRequest) {
+    cancelAnimationFrame(state.aniTimelineDrawRequest);
+    state.aniTimelineDrawRequest = 0;
+  }
   const canvas = el.aniTimelineCanvas;
   const ctx = canvas.getContext("2d");
   const labelWidth = getAniTrackLabelWidth();
@@ -6727,6 +6946,8 @@ function drawAniTimelineCanvas() {
   const visibleTracks = getVisibleAniTrackNames();
   const contentHeight = Math.max(el.aniTimeline.clientHeight, visibleTracks.length * rowHeight);
   const scrollTop = el.aniTimeline.scrollTop;
+  const visibleStartRow = Math.max(0, Math.floor(scrollTop / rowHeight) - 1);
+  const visibleEndRow = Math.min(visibleTracks.length - 1, Math.ceil((scrollTop + el.aniTimeline.clientHeight) / rowHeight) + 1);
   const dpr = window.devicePixelRatio || 1;
   const pixelWidth = Math.max(1, Math.ceil(timelineWidth * dpr));
   const pixelHeight = Math.max(1, Math.ceil(contentHeight * dpr));
@@ -6754,12 +6975,18 @@ function drawAniTimelineCanvas() {
     }
     ctx.stroke();
   }
-  for (const [rowIndex, partName] of visibleTracks.entries()) {
+  for (let rowIndex = visibleStartRow; rowIndex <= visibleEndRow; rowIndex++) {
+    const partName = visibleTracks[rowIndex];
+    if (!partName) continue;
     const y = rowIndex * rowHeight + rowHeight / 2;
+    let lastDrawnX = -Infinity;
     for (const time of getAniPartKeyTimes(partName)) {
       if (time < range.start || time > range.end) continue;
       const x = Math.max(0, Math.min(timelineWidth, (time - range.start) / range.length * timelineWidth));
       const active = partName === state.selectedAniPartName && isSameAniTime(time, state.selectedAniKeyTime);
+      const xPixel = Math.round(x);
+      if (!active && xPixel === lastDrawnX) continue;
+      lastDrawnX = xPixel;
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(Math.PI / 4);
@@ -6774,9 +7001,16 @@ function drawAniTimelineCanvas() {
       ctx.moveTo(x, y - rowHeight / 2);
       ctx.lineTo(x, y + rowHeight / 2);
       ctx.stroke();
-      state.aniTimelineKeyHits.push({ partName, time, x, y, rowIndex });
     }
   }
+}
+
+function scheduleAniTimelineCanvasDraw() {
+  if (state.aniTimelineDrawRequest) return;
+  state.aniTimelineDrawRequest = requestAnimationFrame(() => {
+    state.aniTimelineDrawRequest = 0;
+    drawAniTimelineCanvas();
+  });
 }
 
 function getAniTimelineRowHeight() {
@@ -6789,13 +7023,28 @@ function hitAniTimelineKey(event, partName) {
   const x = event.clientX - rect.left - labelWidth;
   const y = event.clientY - rect.top + el.aniTimeline.scrollTop;
   const threshold = 8;
+  const rowHeight = getAniTimelineRowHeight();
+  const visibleTracks = getVisibleAniTrackNames();
+  const rowIndex = Math.floor(y / rowHeight);
+  const candidateParts = partName ? [partName] : [visibleTracks[rowIndex], visibleTracks[rowIndex - 1], visibleTracks[rowIndex + 1]].filter(Boolean);
+  const range = getAniRange();
+  const timelineWidth = Math.max(1, el.aniTimeline.clientWidth - labelWidth);
+  const timeAtX = range.start + Math.max(0, Math.min(1, x / timelineWidth)) * range.length;
+  const thresholdTime = threshold / timelineWidth * range.length;
   let best = null;
-  for (const hit of state.aniTimelineKeyHits) {
-    if (partName && hit.partName !== partName) continue;
-    const dx = Math.abs(hit.x - x);
-    const dy = Math.abs(hit.y - y);
-    if (dx <= threshold && dy <= threshold && (!best || dx + dy < best.distance)) {
-      best = { ...hit, distance: dx + dy };
+  for (const candidatePart of candidateParts) {
+    const candidateRowIndex = visibleTracks.indexOf(candidatePart);
+    if (candidateRowIndex < 0) continue;
+    const candidateY = candidateRowIndex * rowHeight + rowHeight / 2;
+    const dy = Math.abs(candidateY - y);
+    if (dy > threshold) continue;
+    for (const time of getNearestAniPartKeyTimes(candidatePart, timeAtX, thresholdTime)) {
+      if (time < range.start || time > range.end) continue;
+      const candidateX = Math.max(0, Math.min(timelineWidth, (time - range.start) / range.length * timelineWidth));
+      const dx = Math.abs(candidateX - x);
+      if (dx <= threshold && (!best || dx + dy < best.distance)) {
+        best = { partName: candidatePart, time, x: candidateX, y: candidateY, rowIndex: candidateRowIndex, distance: dx + dy };
+      }
     }
   }
   return best;
@@ -6873,7 +7122,9 @@ function selectAniKey(partName, time) {
   state.selectedAniPartName = partName;
   el.autoPlay.checked = false;
   applyAnimation(time);
-  updateFrameControls();
+  updateAniTimelinePlayback();
+  scheduleAniTimelineCanvasDraw();
+  renderAniKeyEditor();
 }
 
 function selectAniKeyTime(time) {
@@ -6886,7 +7137,9 @@ function seekAniTimelineTime(time) {
   state.selectedAniPartName = "";
   el.autoPlay.checked = false;
   applyAnimation(time);
-  updateFrameControls();
+  updateAniTimelinePlayback();
+  scheduleAniTimelineCanvasDraw();
+  renderAniKeyEditor();
 }
 
 function selectAniTrackAtTime(partName, time) {
@@ -6894,7 +7147,9 @@ function selectAniTrackAtTime(partName, time) {
   state.selectedAniKeyTime = Number(time.toFixed(6));
   el.autoPlay.checked = false;
   applyAnimation(state.selectedAniKeyTime);
-  updateFrameControls();
+  updateAniTimelinePlayback();
+  scheduleAniTimelineCanvasDraw();
+  renderAniKeyEditor();
 }
 
 function clearSelectedAniKey() {
@@ -6903,7 +7158,7 @@ function clearSelectedAniKey() {
   el.aniKeyEditor.style.removeProperty("left");
   el.aniKeyEditor.style.removeProperty("top");
   el.aniKeyEditor.style.removeProperty("bottom");
-  renderAniTimelineKeys();
+  scheduleAniTimelineCanvasDraw();
   renderAniKeyEditor();
 }
 
@@ -7002,6 +7257,7 @@ function handleAniTransformEditorInput(event) {
   if (!state.aniTrackSelectionTouched) initializeVisibleAniTracks();
   applyAnimation(state.animationFrame);
   updateAniTimelinePlayback();
+  scheduleAniTimelineCanvasDraw();
 }
 
 function syncAniTransformInputPair(source) {
@@ -7132,13 +7388,56 @@ function getAniPartsAtTime(time) {
 }
 
 function getAniPartKeyTimes(partName) {
+  if (state.aniPartKeyTimeCache.has(partName)) return state.aniPartKeyTimeCache.get(partName);
   const track = state.currentAnimation?.tracks.get(partName);
   if (!track) return [];
+  const times = mergeAniKeyTimes(track.positions, track.rotations, track.scales);
+  state.aniPartKeyTimeCache.set(partName, times);
+  return times;
+}
+
+function mergeAniKeyTimes(...keyArrays) {
   const times = [];
-  for (const key of [...track.positions, ...track.rotations, ...track.scales]) {
-    if (!times.some((time) => isSameAniTime(time, key.time))) times.push(key.time);
+  for (const keys of keyArrays) {
+    for (const key of keys || []) times.push(key.time);
   }
-  return times.sort((a, b) => a - b);
+  if (!times.length) return [];
+  times.sort((a, b) => a - b);
+  const unique = [times[0]];
+  for (let i = 1; i < times.length; i++) {
+    if (!isSameAniTime(times[i], unique[unique.length - 1])) unique.push(times[i]);
+  }
+  return unique;
+}
+
+function getNearestAniPartKeyTimes(partName, time, thresholdTime) {
+  const times = getAniPartKeyTimes(partName);
+  if (!times.length) return [];
+  const index = lowerBound(times, time);
+  const candidates = [];
+  for (let i = Math.max(0, index - 2); i < Math.min(times.length, index + 3); i++) {
+    if (Math.abs(times[i] - time) <= thresholdTime) candidates.push(times[i]);
+  }
+  return candidates;
+}
+
+function lowerBound(values, target) {
+  let left = 0;
+  let right = values.length;
+  while (left < right) {
+    const mid = (left + right) >> 1;
+    if (values[mid] < target) left = mid + 1;
+    else right = mid;
+  }
+  return left;
+}
+
+function invalidateAniKeyTimeCache(partName = null) {
+  if (!partName) {
+    state.aniPartKeyTimeCache.clear();
+  } else {
+    state.aniPartKeyTimeCache.delete(partName);
+  }
 }
 
 function openAniTrackDialog() {
@@ -7148,6 +7447,220 @@ function openAniTrackDialog() {
   } else {
     el.aniTrackDialog.hidden = false;
   }
+}
+
+function openAniBatchEditor() {
+  if (!state.currentAnimation) return;
+  if (!state.aniBatchSelectedTracks.size) {
+    for (const partName of getVisibleAniTrackNames()) state.aniBatchSelectedTracks.add(partName);
+  }
+  el.aniBatchStartTime.value = formatNumber(state.aniRangeStart);
+  el.aniBatchEndTime.value = formatNumber(state.aniRangeEnd);
+  el.aniBatchPasteTime.value = formatNumber(state.animationFrame);
+  el.aniBatchPaste.disabled = !hasAniBatchClipboard();
+  renderAniBatchTrackSelection();
+  el.aniBatchEditor.hidden = false;
+  positionAniBatchEditorInitial();
+}
+
+function closeAniBatchEditor() {
+  el.aniBatchEditor.hidden = true;
+}
+
+function renderAniBatchTrackSelection() {
+  el.aniBatchTrackList.replaceChildren();
+  if (!state.currentModel) return;
+  const keyed = new Set(getAnimatedPartNames());
+  for (const part of state.currentModel.submeshes) {
+    const partName = part.name;
+    const label = document.createElement("label");
+    label.className = "ani-track-choice ani-key-part";
+    label.classList.toggle("has-key", keyed.has(partName));
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = state.aniBatchSelectedTracks.has(partName);
+    checkbox.addEventListener("input", () => {
+      if (checkbox.checked) state.aniBatchSelectedTracks.add(partName);
+      else state.aniBatchSelectedTracks.delete(partName);
+    });
+    const text = document.createElement("span");
+    text.textContent = partName;
+    label.append(checkbox, text);
+    el.aniBatchTrackList.append(label);
+  }
+}
+
+function positionAniBatchEditorInitial() {
+  if (el.aniBatchEditor.style.left || el.aniBatchEditor.style.top) return;
+  requestAnimationFrame(() => {
+    if (el.aniBatchEditor.hidden || el.aniBatchEditor.style.left || el.aniBatchEditor.style.top) return;
+    const editorRect = el.aniBatchEditor.getBoundingClientRect();
+    el.aniBatchEditor.style.left = `12px`;
+    el.aniBatchEditor.style.top = `${-editorRect.height - 12}px`;
+    el.aniBatchEditor.style.bottom = "auto";
+  });
+}
+
+function getAniBatchRange() {
+  const duration = Math.max(state.currentAnimation?.duration || 0, 0);
+  const start = Math.max(0, Math.min(duration, Number(el.aniBatchStartTime.value) || 0));
+  const rawEnd = Number(el.aniBatchEndTime.value);
+  const end = Math.max(start, Math.min(duration, Number.isFinite(rawEnd) ? rawEnd : duration));
+  return { start, end };
+}
+
+function getAniBatchSelectedPartNames() {
+  if (!state.currentModel) return [];
+  const valid = new Set(state.currentModel.submeshes.map((part) => part.name));
+  return [...state.aniBatchSelectedTracks].filter((partName) => valid.has(partName));
+}
+
+function selectAllAniBatchTracks() {
+  state.aniBatchSelectedTracks = new Set(getAnimatedPartNames());
+  renderAniBatchTrackSelection();
+}
+
+function clearAniBatchTracks() {
+  state.aniBatchSelectedTracks.clear();
+  renderAniBatchTrackSelection();
+}
+
+function handleAniBatchRangeOperation(operation) {
+  if (!state.currentAnimation) return;
+  const range = getAniBatchRange();
+  const partNames = getAniBatchSelectedPartNames();
+  if (!partNames.length) return;
+  if (operation === "copy") {
+    state.aniBatchClipboard = copyAniBatchRange(partNames, range.start, range.end);
+    el.aniBatchPaste.disabled = !hasAniBatchClipboard();
+  }
+  if (operation === "remove") {
+    cutAniBatchRange(partNames, range.start, range.end);
+    refreshAniAfterBatchEdit();
+  } else if (operation === "delete") {
+    deleteAniBatchRange(partNames, range.start, range.end);
+    refreshAniAfterBatchEdit();
+  }
+}
+
+function copyAniBatchRange(partNames, start, end) {
+  const tracks = [];
+  for (const partName of partNames) {
+    const track = state.currentAnimation.tracks.get(partName);
+    if (!track) continue;
+    const copy = { partName, positions: [], rotations: [], scales: [] };
+    for (const type of ["positions", "rotations", "scales"]) {
+      copy[type] = track[type]
+        .filter((key) => key.time >= start && key.time <= end)
+        .map((key) => ({ timeOffset: Number((key.time - start).toFixed(6)), value: cloneAniKeyValue(key.value) }));
+    }
+    if (copy.positions.length || copy.rotations.length || copy.scales.length) tracks.push(copy);
+  }
+  return { duration: Math.max(0, end - start), partNames: [...partNames], tracks };
+}
+
+function deleteAniBatchRange(partNames, start, end) {
+  for (const partName of partNames) {
+    const track = state.currentAnimation.tracks.get(partName);
+    if (!track) continue;
+    for (const type of ["positions", "rotations", "scales"]) {
+      track[type].splice(0, track[type].length, ...track[type].filter((key) => key.time < start || key.time > end));
+    }
+    invalidateAniKeyTimeCache(partName);
+  }
+}
+
+function cutAniBatchRange(partNames, start, end) {
+  const delta = Math.max(0, end - start);
+  deleteAniBatchRange(partNames, start, end);
+  if (delta <= 0) return;
+  for (const partName of partNames) {
+    const track = state.currentAnimation.tracks.get(partName);
+    if (!track) continue;
+    for (const type of ["positions", "rotations", "scales"]) {
+      for (const key of track[type]) {
+        if (key.time > end) key.time = Number((key.time - delta).toFixed(6));
+      }
+      sortAniKeys(track[type]);
+    }
+    invalidateAniKeyTimeCache(partName);
+  }
+  state.currentAnimation.duration = Math.max(0, (state.currentAnimation.duration || 0) - delta);
+  if (state.animationFrame > state.currentAnimation.duration) state.animationFrame = state.currentAnimation.duration;
+}
+
+function getAniBatchPasteMode() {
+  return el.aniBatchPasteMode.querySelector("input[name='aniBatchPasteMode']:checked")?.value || "merge";
+}
+
+function hasAniBatchClipboard() {
+  const clipboard = state.aniBatchClipboard;
+  return !!clipboard && ((clipboard.duration || 0) > 0 || !!clipboard.tracks?.length);
+}
+
+function pasteAniBatchClipboard() {
+  if (!state.currentAnimation || !hasAniBatchClipboard()) return;
+  const pasteTime = Math.max(0, Number(el.aniBatchPasteTime.value) || 0);
+  const mode = getAniBatchPasteMode();
+  const clipboardDuration = Math.max(0, state.aniBatchClipboard.duration || 0);
+  const targetPartNames = state.aniBatchClipboard.partNames?.length
+    ? state.aniBatchClipboard.partNames
+    : state.aniBatchClipboard.tracks.map((track) => track.partName);
+  const selectedPartNames = getAniBatchSelectedPartNames();
+  const insertPartNames = [...new Set([...targetPartNames, ...selectedPartNames])];
+  const previousDuration = state.currentAnimation.duration || 0;
+  if (mode === "insert" && clipboardDuration > 0) {
+    shiftAniBatchKeysAfter(insertPartNames, pasteTime, clipboardDuration);
+    state.currentAnimation.duration = previousDuration + clipboardDuration;
+  } else if (mode === "overwrite") {
+    deleteAniBatchRange(targetPartNames, pasteTime, pasteTime + clipboardDuration);
+  }
+  for (const copiedTrack of state.aniBatchClipboard.tracks) {
+    const track = ensureAniTrack(copiedTrack.partName);
+    for (const sourceType of ["positions", "rotations", "scales"]) {
+      const keys = track[sourceType];
+      for (const key of copiedTrack[sourceType]) {
+        const time = Number((pasteTime + key.timeOffset).toFixed(6));
+        const existing = keys.findIndex((candidate) => isSameAniTime(candidate.time, time));
+        const pastedKey = { time, value: cloneAniKeyValue(key.value) };
+        if (existing >= 0) keys[existing] = pastedKey;
+        else keys.push(pastedKey);
+      }
+      sortAniKeys(keys);
+    }
+    invalidateAniKeyTimeCache(copiedTrack.partName);
+    state.visibleAniTracks ||= new Set();
+    state.visibleAniTracks.add(copiedTrack.partName);
+  }
+  if (mode !== "insert") {
+    state.currentAnimation.duration = Math.max(state.currentAnimation.duration || 0, pasteTime + clipboardDuration);
+  }
+  refreshAniAfterBatchEdit();
+}
+
+function shiftAniBatchKeysAfter(partNames, startTime, delta) {
+  for (const partName of partNames) {
+    const track = state.currentAnimation.tracks.get(partName);
+    if (!track) continue;
+    for (const type of ["positions", "rotations", "scales"]) {
+      for (const key of track[type]) {
+        if (key.time >= startTime) key.time = Number((key.time + delta).toFixed(6));
+      }
+      sortAniKeys(track[type]);
+    }
+    invalidateAniKeyTimeCache(partName);
+  }
+}
+
+function cloneAniKeyValue(value) {
+  return value?.clone ? value.clone() : value;
+}
+
+function refreshAniAfterBatchEdit() {
+  if (!state.aniTrackSelectionTouched) initializeVisibleAniTracks();
+  applyAnimation(state.animationFrame);
+  updateFrameControls();
+  renderAniBatchTrackSelection();
 }
 
 function renderAniTrackSelection() {
@@ -7196,6 +7709,7 @@ function moveAniPartKeyTime(partName, fromTime, toTime) {
     }
     sortAniKeys(keys);
   }
+  invalidateAniKeyTimeCache(partName);
 }
 
 function hasAniTransformKey(partName, type, time) {
@@ -7221,12 +7735,14 @@ function setAniTransformKey(track, type, time, values) {
     key.value = new THREE.Vector3(values.x, values.y, values.z);
   }
   sortAniKeys(keys);
+  invalidateAniKeyTimeCache(track.boneName);
 }
 
 function removeAniTransformKey(track, type, time) {
   const keys = getAniKeyArray(track, type);
   const index = keys.findIndex((key) => isSameAniTime(key.time, time));
   if (index >= 0) keys.splice(index, 1);
+  invalidateAniKeyTimeCache(track.boneName);
 }
 
 function removeTrackKeysAtTime(track, time) {
