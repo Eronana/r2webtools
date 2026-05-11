@@ -302,7 +302,7 @@ const I18N = {
     redoDone: "Redone",
     importedSkinnedGltf: "Imported {name} as MD9 with {parts} bone parts",
     importNeedsGltf: "Import needs a glb or gltf file",
-    importNeedsSkin: "No skinned mesh with bones found",
+    importNeedsSkin: "No skinned or rigid mesh found",
     replacementNeedsModel: "Replacement needs an obj, glb, or gltf file",
     replacementNoMesh: "Replacement failed: no usable mesh in the model",
     replacementTooLarge: "Replacement failed: one part has more than 65535 vertices",
@@ -453,7 +453,7 @@ const I18N = {
     redoDone: "已重做",
     importedSkinnedGltf: "已将 {name} 导入为 MD9，共 {parts} 个骨骼部件",
     importNeedsGltf: "导入需要 glb 或 gltf 文件",
-    importNeedsSkin: "没有找到带骨骼的蒙皮 mesh",
+    importNeedsSkin: "没有找到蒙皮或刚性 mesh",
     replacementNeedsModel: "替换部件需要 obj、glb 或 gltf 文件",
     replacementNoMesh: "替换失败: 模型中没有可用 mesh",
     replacementTooLarge: "替换失败: 单个部件顶点数超过 65535",
@@ -604,7 +604,7 @@ const I18N = {
     redoDone: "Rehecho",
     importedSkinnedGltf: "Importado {name} como MD9 con {parts} partes de hueso",
     importNeedsGltf: "La importacion necesita un archivo glb o gltf",
-    importNeedsSkin: "No se encontro mesh con skin y huesos",
+    importNeedsSkin: "No se encontro mesh con skin o rigido",
     replacementNeedsModel: "El reemplazo necesita un archivo obj, glb o gltf",
     replacementNoMesh: "Fallo el reemplazo: el modelo no tiene mesh usable",
     replacementTooLarge: "Fallo el reemplazo: una parte supera 65535 vertices",
@@ -4391,7 +4391,7 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
     skinnedMeshes.push(object);
     for (const bone of object.skeleton.bones) boneSet.add(bone);
   });
-  if (!skinnedMeshes.length || !boneSet.size) throw new Error(t("importNeedsSkin"));
+  if (!skinnedMeshes.length || !boneSet.size) return createMd9FromRigidGltf(gltf, modelFile, files);
 
   let bones = [...boneSet];
   let boneIndex = new Map(bones.map((bone, index) => [bone, index]));
@@ -4464,6 +4464,247 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
     model.materials[0].atlasHasAlpha = material.atlasHasAlpha;
   }
   return model;
+}
+
+async function createMd9FromRigidGltf(gltf, modelFile, files) {
+  const meshObjects = [];
+  gltf.scene.updateMatrixWorld(true);
+  gltf.scene.traverse((object) => {
+    if (object.isMesh && object.geometry) meshObjects.push(object);
+  });
+  if (!meshObjects.length) throw new Error(t("importNeedsSkin"));
+
+  const partNodes = collectRigidImportPartNodes(gltf.scene, meshObjects);
+  const nodeToIndex = new Map(partNodes.map((node, index) => [node, index]));
+  const buckets = partNodes.map(() => createPartBucket());
+  const textureSources = [];
+  const vertexRefSources = [];
+  const zeroUv = new THREE.Vector2();
+
+  for (const mesh of meshObjects) {
+    const partNode = getRigidImportPartNode(mesh);
+    const partIndex = nodeToIndex.get(partNode);
+    if (partIndex === undefined) continue;
+    appendRigidMeshToPartBucket(mesh, partNode, buckets[partIndex], partIndex, files, textureSources, vertexRefSources, zeroUv);
+  }
+
+  let material = createMd9MaterialFromThree(null, "", null, { newFormat: true });
+  let previewTexture = null;
+  if (textureSources.length) {
+    const atlas = await buildTextureAtlas(textureSources);
+    material = createMd9MaterialFromThree(null, makePartTextureName(modelFile.name.replace(/\.[^.]+$/, "")), null, { newFormat: true });
+    material.atlasSourceImage = atlas.canvas;
+    material.atlasHasAlpha = atlas.hasAlpha;
+    for (const ref of vertexRefSources) {
+      const source = textureSources[ref.sourceId];
+      if (!source?.rect) continue;
+      const remapped = remapSourceUvToAtlas(source, ref.u, ref.v, atlas.canvas.width, atlas.canvas.height);
+      buckets[ref.partIndex].uvs[ref.uvOffset] = remapped.u;
+      buckets[ref.partIndex].uvs[ref.uvOffset + 1] = remapped.v;
+    }
+    previewTexture = new THREE.CanvasTexture(atlas.canvas);
+    ensureTextureMatrix(previewTexture);
+    previewTexture.colorSpace = THREE.SRGBColorSpace;
+    previewTexture.flipY = false;
+    previewTexture.wrapS = THREE.ClampToEdgeWrapping;
+    previewTexture.wrapT = THREE.ClampToEdgeWrapping;
+    previewTexture.userData.hasAlpha = atlas.hasAlpha;
+  }
+  for (const bucket of buckets) compactPartBucketVertices(bucket);
+
+  const usedNames = new Set();
+  const rigidParts = buildRigidImportParts(partNodes, buckets, usedNames);
+  const submeshes = rigidParts.map((part) => part.submesh);
+  const nodeNameToPartName = new Map(rigidParts.map((part) => [part.node.name, part.submesh.name]));
+  const model = {
+    name: `${modelFile.name.replace(/\.[^.]+$/, "")}.md9`,
+    baseDir: "",
+    format: MD9_FORMAT,
+    newFormat: true,
+    materials: [material],
+    submeshes,
+    totalVertices: 0,
+    totalFaces: 0,
+    bounds: new THREE.Box3(),
+    transformSliderScale: 1,
+    generatedAnimations: createAniAnimationsFromGltf(gltf, partNodes, nodeNameToPartName)
+  };
+  captureInitialModelState(model);
+  updateGeneratedModelCounts(model);
+  if (previewTexture) {
+    ensureTextureMatrix(previewTexture);
+    model.materials[0].atlasSourceImage = material.atlasSourceImage;
+    model.materials[0].atlasHasAlpha = material.atlasHasAlpha;
+  }
+  return model;
+}
+
+function buildRigidImportParts(partNodes, buckets, usedNames) {
+  const keptNodeToNewIndex = new Map();
+  const kept = [];
+  for (const [oldIndex, node] of partNodes.entries()) {
+    if (!buckets[oldIndex]?.positions?.length) continue;
+    keptNodeToNewIndex.set(node, kept.length);
+    kept.push({ oldIndex, node });
+  }
+  if (!kept.length) throw new Error(t("importNeedsSkin"));
+  const keptNodes = kept.map((item) => item.node);
+  return kept.map((item, newIndex) => {
+    const parentId = getRigidImportNearestKeptParentId(item.node, keptNodeToNewIndex);
+    return {
+      node: item.node,
+      submesh: createMd9PartFromRigidNode(
+        item.node,
+        newIndex,
+        parentId,
+        keptNodes,
+        buckets[item.oldIndex],
+        usedNames
+      )
+    };
+  });
+}
+
+function getRigidImportNearestKeptParentId(node, keptNodeToNewIndex) {
+  let parent = node.parent;
+  while (parent) {
+    const index = keptNodeToNewIndex.get(parent);
+    if (index !== undefined) return index;
+    parent = parent.parent;
+  }
+  return -1;
+}
+
+function collectRigidImportPartNodes(sceneRoot, meshObjects) {
+  const meshPartNodes = new Set(meshObjects.map(getRigidImportPartNode));
+  const candidateRoots = findRigidImportCandidateRoots(meshPartNodes);
+  const partNodes = [];
+  const add = (node) => {
+    if (!node || node.isScene || partNodes.includes(node)) return;
+    partNodes.push(node);
+  };
+  for (const root of candidateRoots) {
+    root.traverse((node) => {
+      if (node === root && root.name === "md9_export") return;
+      if (node.isScene) return;
+      const hasPartMesh = !node.isMesh && node.children.some((child) => child.isMesh && meshPartNodes.has(node));
+      const hasPartDescendant = !node.isMesh && node.children.some((child) => !child.isMesh);
+      if (hasPartMesh || hasPartDescendant || meshPartNodes.has(node)) add(node);
+    });
+  }
+  for (const node of meshPartNodes) add(node);
+  if (partNodes.length) return partNodes;
+  return meshObjects.map((mesh) => mesh);
+}
+
+function findRigidImportCandidateRoots(meshPartNodes) {
+  const roots = new Set();
+  for (const node of meshPartNodes) {
+    let root = node;
+    while (root.parent && !root.parent.isScene) {
+      if (root.parent.name === "md9_export") break;
+      root = root.parent;
+    }
+    if (root.name === "md9_export") {
+      for (const child of root.children) {
+        if (!child.isMesh) roots.add(child);
+      }
+    } else {
+      roots.add(root);
+    }
+  }
+  return [...roots];
+}
+
+function getRigidImportPartNode(mesh) {
+  const parent = mesh.parent;
+  if (parent && !parent.isScene && !parent.isMesh && parent.name !== "md9_export") {
+    return parent;
+  }
+  return mesh;
+}
+
+function getRigidImportParentId(node, nodeToIndex) {
+  let parent = node.parent;
+  while (parent) {
+    const index = nodeToIndex.get(parent);
+    if (index !== undefined) return index;
+    parent = parent.parent;
+  }
+  return -1;
+}
+
+function appendRigidMeshToPartBucket(mesh, partNode, bucket, partIndex, files, textureSources, vertexRefSources, zeroUv) {
+  const geometry = mesh.geometry.getAttribute("normal") ? mesh.geometry : mesh.geometry.clone();
+  if (!geometry.getAttribute("normal")) geometry.computeVertexNormals();
+  const position = geometry.getAttribute("position");
+  const normal = geometry.getAttribute("normal");
+  const uv = geometry.getAttribute("uv");
+  if (!position || !normal) return;
+  const index = geometry.getIndex();
+  const drawCount = index ? index.count : position.count;
+  const materialForDraw = buildMaterialDrawLookup(geometry, mesh.material);
+  const inversePartWorld = new THREE.Matrix4().copy(partNode.matrixWorld).invert();
+  const normalMatrix = new THREE.Matrix3().getNormalMatrix(new THREE.Matrix4().multiplyMatrices(inversePartWorld, mesh.matrixWorld));
+  const vertex = new THREE.Vector3();
+  const vertexNormal = new THREE.Vector3();
+  for (let drawIndex = 0; drawIndex < drawCount; drawIndex += 3) {
+    const start = bucket.positions.length / 3;
+    const sourceId = registerTextureSource(textureSources, materialForDraw(drawIndex), files);
+    for (let corner = 0; corner < 3; corner++) {
+      const vertexIndex = index ? index.getX(drawIndex + corner) : drawIndex + corner;
+      vertex
+        .fromBufferAttribute(position, vertexIndex)
+        .applyMatrix4(mesh.matrixWorld)
+        .applyMatrix4(inversePartWorld);
+      vertexNormal
+        .fromBufferAttribute(normal, vertexIndex)
+        .applyMatrix3(normalMatrix)
+        .normalize();
+      bucket.positions.push(vertex.x, vertex.y, vertex.z);
+      bucket.normals.push(vertexNormal.x, vertexNormal.y, vertexNormal.z);
+      const u = uv ? uv.getX(vertexIndex) : zeroUv.x;
+      const v = uv ? uv.getY(vertexIndex) : zeroUv.y;
+      const uvOffset = bucket.uvs.length;
+      bucket.uvs.push(u, v);
+      if (sourceId >= 0) vertexRefSources.push({ partIndex, uvOffset, sourceId, u: wrapUv(u), v: wrapUv(v) });
+    }
+    bucket.indices.push(start, start + 1, start + 2);
+    bucket.triangleInfluences.push(null);
+    bucket.triangleSourceIds.push(sourceId);
+  }
+  if (geometry !== mesh.geometry) geometry.dispose();
+}
+
+function createMd9PartFromRigidNode(node, index, parentId, nodes, bucket, usedNames) {
+  ensureNonEmptyBucket(bucket);
+  if (bucket.positions.length / 3 > 65535) throw new Error(t("replacementTooLarge"));
+  const parentWorld = parentId >= 0 ? nodes[parentId].matrixWorld : new THREE.Matrix4();
+  const localMatrix = parentId >= 0
+    ? new THREE.Matrix4().copy(parentWorld).invert().multiply(node.matrixWorld)
+    : new THREE.Matrix4().copy(node.matrixWorld);
+  const positions = new Float32Array(bucket.positions);
+  const normals = new Float32Array(bucket.normals);
+  const uvs = new Float32Array(bucket.uvs);
+  const indices = new Uint16Array(bucket.indices);
+  const box = computeArrayBox(positions);
+  return {
+    name: makeUniqueImportedPartName(node.name || `part_${index}`, index, usedNames),
+    matrix: renderMatrixToMd9Array(localMatrix),
+    boundingBox: box.isEmpty() ? [0, 0, 0, 0, 0, 0] : [box.min.x, box.min.y, -box.max.z, box.max.x, box.max.y, -box.min.z],
+    localPositions: positions,
+    normals,
+    uvs,
+    indices,
+    materialId: 0,
+    parentId,
+    vertexCount: positions.length / 3,
+    faceCount: indices.length / 3,
+    bonePosition: new THREE.Vector3().setFromMatrixPosition(localMatrix),
+    worldBonePosition: new THREE.Vector3().setFromMatrixPosition(node.matrixWorld),
+    importWasEmpty: false,
+    replacement: null
+  };
 }
 
 function createPartBucket() {
@@ -5163,6 +5404,18 @@ function makeUniqueImportedBoneName(name, index) {
   return sanitizeFilename(`${name || "bone"}_${index}`).slice(0, 31) || `bone_${index}`;
 }
 
+function makeUniqueImportedPartName(name, index, usedNames) {
+  const base = sanitizeFilename(name || `part_${index}`).slice(0, 31) || `part_${index}`;
+  let candidate = base;
+  let suffix = 2;
+  while (usedNames.has(candidate.toLowerCase())) {
+    const tail = `_${suffix++}`;
+    candidate = `${base.slice(0, Math.max(1, 31 - tail.length))}${tail}`;
+  }
+  usedNames.add(candidate.toLowerCase());
+  return candidate;
+}
+
 function updateGeneratedModelCounts(model) {
   validateParentHierarchy(model.submeshes);
   model.totalVertices = model.submeshes.reduce((sum, part) => sum + part.vertexCount, 0);
@@ -5193,15 +5446,15 @@ function updateGeneratedModelCounts(model) {
   if (model.bounds.isEmpty()) model.bounds.set(new THREE.Vector3(), new THREE.Vector3());
 }
 
-function createAniAnimationsFromGltf(gltf, bones) {
-  const boneNames = new Set(bones.map((bone, index) => makeUniqueImportedBoneName(bone.name || `bone_${index}`, index)));
-  const nodeNameToBoneName = new Map(bones.map((bone, index) => [bone.name, makeUniqueImportedBoneName(bone.name || `bone_${index}`, index)]));
+function createAniAnimationsFromGltf(gltf, bones, nodeNameToBoneName = null) {
+  const nameMap = nodeNameToBoneName || new Map(bones.map((bone, index) => [bone.name, makeUniqueImportedBoneName(bone.name || `bone_${index}`, index)]));
+  const boneNames = new Set(nameMap.values());
   return (gltf.animations || []).map((clip) => {
     const tracks = new Map();
     let duration = 0;
     for (const keyTrack of clip.tracks) {
       const parsed = parseGltfTrackName(keyTrack.name);
-      const boneName = nodeNameToBoneName.get(parsed.nodeName);
+      const boneName = nameMap.get(parsed.nodeName);
       if (!boneName || !boneNames.has(boneName)) continue;
       if (!tracks.has(boneName)) tracks.set(boneName, { boneName, positions: [], rotations: [], scales: [] });
       const track = tracks.get(boneName);
