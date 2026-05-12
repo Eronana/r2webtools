@@ -27,7 +27,7 @@
               <button type="button" data-language="es">ES</button>
             </div>
           </div>
-          <div class="version-text">Build 2026.05.12.0344</div>
+          <div class="version-text">Build 2026.05.12.0429</div>
           <div class="contact-text">交流QQ群: 1094233945</div>
         </div>
         <div id="highlightInfo" class="highlight-info" hidden></div>
@@ -261,13 +261,23 @@
               <button id="duplicatePart" type="button" disabled data-i18n="duplicatePart">Duplicate part</button>
               <button id="deletePart" type="button" disabled data-i18n="deletePart">Delete part</button>
               <button id="exportSelectedParts" type="button" disabled data-i18n="exportIntegrated">Export integrated</button>
+              <button id="exportSelectedPartsMd9" type="button" disabled data-i18n="exportIntegratedMd9">Export integrated MD9</button>
             </div>
           </div>
           <div class="batch-actions">
             <button id="batchExportParts" type="button" disabled data-i18n="batchExport">Batch export</button>
+            <button id="batchExportPartsMd9" type="button" disabled data-i18n="batchExportMd9">Batch export MD9</button>
             <label class="file-button compact-file-button">
-              <input id="batchReplaceInput" type="file" accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga,.dds" multiple />
+              <input id="batchReplaceInput" type="file" accept=".md9,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga,.dds" multiple />
               <span data-i18n="batchReplace">Batch replace</span>
+            </label>
+            <label class="switch-row">
+              <input id="batchReplaceKeepSize" type="checkbox" />
+              <span data-i18n="replaceKeepSize">Keep size</span>
+            </label>
+            <label class="switch-row">
+              <input id="batchReplaceKeepPosition" type="checkbox" />
+              <span data-i18n="replaceKeepPosition">Keep position</span>
             </label>
             <button id="batchEditToggle" type="button" disabled aria-pressed="false" data-i18n="batchEdit">Batch edit</button>
           </div>
@@ -325,13 +335,19 @@
           <div id="transformEditor" class="transform-editor"></div>
 
           <label class="file-button">
-            <input id="replaceMeshInput" type="file" accept=".obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga,.dds" multiple />
+            <input id="replaceMeshInput" type="file" accept=".md9,.obj,.mtl,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.avif,.tga,.dds" multiple />
             <span data-i18n="replaceModel">Replace OBJ / GLB / GLTF</span>
           </label>
-          <label class="switch-row">
-            <input id="replaceKeepSize" type="checkbox" />
-            <span data-i18n="replaceKeepSize">Keep size</span>
-          </label>
+          <div class="replace-options">
+            <label class="switch-row">
+              <input id="replaceKeepSize" type="checkbox" />
+              <span data-i18n="replaceKeepSize">Keep size</span>
+            </label>
+            <label class="switch-row">
+              <input id="replaceKeepPosition" type="checkbox" />
+              <span data-i18n="replaceKeepPosition">Keep position</span>
+            </label>
+          </div>
           <small id="replaceHint" data-i18n="replaceHint">Drop obj/mtl or glb/gltf/bin with textures here</small>
         </div>
       </aside>

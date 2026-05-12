@@ -103,8 +103,12 @@ const el = {
   addPart: document.querySelector("#addPart"),
   duplicatePart: document.querySelector("#duplicatePart"),
   exportSelectedParts: document.querySelector("#exportSelectedParts"),
+  exportSelectedPartsMd9: document.querySelector("#exportSelectedPartsMd9"),
   batchExportParts: document.querySelector("#batchExportParts"),
+  batchExportPartsMd9: document.querySelector("#batchExportPartsMd9"),
   batchReplaceInput: document.querySelector("#batchReplaceInput"),
+  batchReplaceKeepSize: document.querySelector("#batchReplaceKeepSize"),
+  batchReplaceKeepPosition: document.querySelector("#batchReplaceKeepPosition"),
   batchEditToggle: document.querySelector("#batchEditToggle"),
   batchGroupTransform: document.querySelector("#batchGroupTransform"),
   batchEditReset: document.querySelector("#batchEditReset"),
@@ -131,6 +135,7 @@ const el = {
   transformEditor: document.querySelector("#transformEditor"),
   replaceMeshInput: document.querySelector("#replaceMeshInput"),
   replaceKeepSize: document.querySelector("#replaceKeepSize"),
+  replaceKeepPosition: document.querySelector("#replaceKeepPosition"),
   replaceHint: document.querySelector("#replaceHint"),
   status: document.querySelector("#status"),
   statFile: document.querySelector("#statFile"),
@@ -261,7 +266,8 @@ const I18N = {
     verts: "Vtx",
     facesShort: "Tri",
     exportSelected: "Export selected",
-    exportIntegrated: "Export GLB",
+    exportIntegrated: "Export integrated GLB",
+    exportIntegratedMd9: "Export integrated MD9",
     addPart: "Add part",
     duplicatePart: "Duplicate",
     importSkinnedGltf: "Import skinned GLB / GLTF",
@@ -278,7 +284,8 @@ const I18N = {
     freshImport: "Fresh import",
     importGltfButton: "Import GLB / GLTF as MD9",
     partName: "Name",
-    batchExport: "Export ZIP",
+    batchExport: "Batch export GLB",
+    batchExportMd9: "Batch export MD9",
     batchReplace: "Batch Replace",
     batchEdit: "Batch Edit",
     groupTransform: "As group",
@@ -301,6 +308,7 @@ const I18N = {
     trackBinFlags: "Vertex start {vertexStart}",
     replaceModel: "Replace model",
     replaceKeepSize: "Keep size",
+    replaceKeepPosition: "Keep position",
     replaceHint: "Drop obj/mtl or glb/gltf/bin with textures here",
     chooseMd9: "Choose an MD9 or track bin file",
     dropOverlay: "Drop md9 / bin / ani / obj / glb / gltf / texture files",
@@ -422,7 +430,8 @@ const I18N = {
     verts: "顶点",
     facesShort: "面",
     exportSelected: "导出选中",
-    exportIntegrated: "整合导出",
+    exportIntegrated: "整合导出GLB",
+    exportIntegratedMd9: "整合导出MD9",
     addPart: "添加部件",
     duplicatePart: "复制部件",
     importSkinnedGltf: "导入蒙皮 GLB / GLTF",
@@ -439,7 +448,8 @@ const I18N = {
     freshImport: "全新导入",
     importGltfButton: "导入 GLB / GLTF 为 MD9",
     partName: "名称",
-    batchExport: "批量导出",
+    batchExport: "批量导出GLB",
+    batchExportMd9: "批量导出MD9",
     batchReplace: "批量替换",
     batchEdit: "批量编辑",
     groupTransform: "整体变换",
@@ -462,6 +472,7 @@ const I18N = {
     trackBinFlags: "顶点起点 {vertexStart}",
     replaceModel: "替换模型",
     replaceKeepSize: "保持大小",
+    replaceKeepPosition: "保持位置",
     replaceHint: "可把 obj/mtl 或 glb/gltf/bin 和贴图一起拖入页面",
     chooseMd9: "选择一个 MD9 或赛道 bin 文件",
     dropOverlay: "拖入 md9 / bin / ani / obj / glb / gltf / 贴图文件",
@@ -583,7 +594,8 @@ const I18N = {
     verts: "Vert.",
     facesShort: "Tri",
     exportSelected: "Exportar seleccion",
-    exportIntegrated: "Exportar GLB",
+    exportIntegrated: "Exportar GLB integrado",
+    exportIntegratedMd9: "Exportar MD9 integrado",
     addPart: "Agregar parte",
     duplicatePart: "Duplicar",
     importSkinnedGltf: "Importar GLB / GLTF con skin",
@@ -600,7 +612,8 @@ const I18N = {
     freshImport: "Importar nuevo",
     importGltfButton: "Importar GLB / GLTF a MD9",
     partName: "Nombre",
-    batchExport: "Exportar ZIP",
+    batchExport: "Exportar GLB lote",
+    batchExportMd9: "Exportar MD9 lote",
     batchReplace: "Reempl. lote",
     batchEdit: "Editar lote",
     groupTransform: "Como grupo",
@@ -623,6 +636,7 @@ const I18N = {
     trackBinFlags: "Inicio vert. {vertexStart}",
     replaceModel: "Reemplazar modelo",
     replaceKeepSize: "Mantener tamano",
+    replaceKeepPosition: "Mantener pos.",
     replaceHint: "Suelta obj/mtl o glb/gltf/bin con texturas aqui",
     chooseMd9: "Elige un archivo MD9 o bin de pista",
     dropOverlay: "Suelta archivos md9 / bin / ani / obj / glb / gltf / texturas",
@@ -806,7 +820,9 @@ el.partFilter.addEventListener("input", () => {
 el.addPart.addEventListener("click", addPart);
 el.duplicatePart.addEventListener("click", duplicateHighlightedPart);
 el.exportSelectedParts.addEventListener("click", exportSelectedPartsGlb);
+el.exportSelectedPartsMd9.addEventListener("click", exportSelectedPartsMd9);
 el.batchExportParts.addEventListener("click", batchExportSelectedPartsGlb);
+el.batchExportPartsMd9.addEventListener("click", batchExportSelectedPartsMd9);
 el.batchReplaceInput.addEventListener("change", async () => {
   await batchReplaceSelectedPartsFromFiles([...el.batchReplaceInput.files]);
   el.batchReplaceInput.value = "";
@@ -1040,7 +1056,7 @@ function isTextureFile(name) {
 }
 
 function isReplacementModelFile(name) {
-  return /\.(obj|glb|gltf)$/i.test(name);
+  return /\.(md9|obj|glb|gltf)$/i.test(name);
 }
 
 function resetOpenedFiles() {
@@ -1073,7 +1089,9 @@ function resetOpenedFiles() {
   el.duplicatePart.disabled = true;
   el.deletePart.disabled = true;
   el.exportSelectedParts.disabled = true;
+  el.exportSelectedPartsMd9.disabled = true;
   el.batchExportParts.disabled = true;
+  el.batchExportPartsMd9.disabled = true;
   el.batchEditToggle.disabled = true;
   populateEditorForNoSelection();
   setEditorEnabled(false);
@@ -2730,7 +2748,9 @@ function getSelectedPartIndices() {
 function updateBatchActionState() {
   const hasSelection = Boolean(state.currentModel && getSelectedPartIndices().length);
   el.exportSelectedParts.disabled = !hasSelection;
+  el.exportSelectedPartsMd9.disabled = !hasSelection || isTrackBinModel();
   el.batchExportParts.disabled = !hasSelection;
+  el.batchExportPartsMd9.disabled = !hasSelection || isTrackBinModel();
   el.batchEditToggle.disabled = !state.currentModel;
 }
 
@@ -2961,6 +2981,64 @@ async function batchExportSelectedPartsGlb() {
   const baseName = state.currentModel.name.split(/[\\/]/).pop().replace(/\.[^.]+$/, "") || "model";
   const zip = await createZipBlob(entries);
   downloadBlob(zip, `${sanitizeFilename(baseName)}.zip`);
+}
+
+function exportSelectedPartsMd9() {
+  if (!state.currentModel || isTrackBinModel()) return;
+  const indices = getSelectedPartIndices();
+  if (!indices.length) {
+    setStatus(t("noSelectedParts"));
+    return;
+  }
+  const baseName = state.currentModel.name.split(/[\\/]/).pop().replace(/\.[^.]+$/, "") || "model";
+  const model = createSelectedMd9Model(indices, `${baseName}_integrated.md9`);
+  downloadBlob(new Blob([serializeMd9(model)], { type: "application/octet-stream" }), `${sanitizeFilename(baseName)}_integrated.md9`);
+  setStatus(t("exported", { name: `${sanitizeFilename(baseName)}_integrated.md9` }));
+}
+
+async function batchExportSelectedPartsMd9() {
+  if (!state.currentModel || isTrackBinModel()) return;
+  const indices = getSelectedPartIndices();
+  if (!indices.length) {
+    setStatus(t("noSelectedParts"));
+    return;
+  }
+  const entries = [];
+  for (const index of indices) {
+    const part = state.currentModel.submeshes[index];
+    const name = `${sanitizeFilename(part.name || `part_${index}`)}.md9`;
+    const model = createSelectedMd9Model([index], name);
+    entries.push({ name, data: new Blob([serializeMd9(model)], { type: "application/octet-stream" }) });
+  }
+  const baseName = state.currentModel.name.split(/[\\/]/).pop().replace(/\.[^.]+$/, "") || "model";
+  const zip = await createZipBlob(entries);
+  downloadBlob(zip, `${sanitizeFilename(baseName)}_md9_parts.zip`);
+  setStatus(t("exported", { name: `${sanitizeFilename(baseName)}_md9_parts.zip` }));
+}
+
+function createSelectedMd9Model(indices, name) {
+  const selected = new Set(indices);
+  const remap = new Map(indices.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+  const model = {
+    name,
+    baseDir: state.currentModel.baseDir,
+    format: MD9_FORMAT,
+    newFormat: state.currentModel.newFormat,
+    materials: state.currentModel.materials.map(cloneMaterialState),
+    submeshes: indices.map((oldIndex) => {
+      const part = clonePartForSnapshot(state.currentModel.submeshes[oldIndex]);
+      part.parentId = selected.has(part.parentId) ? remap.get(part.parentId) : -1;
+      part.initialState = clonePartState(part);
+      return part;
+    }),
+    totalVertices: 0,
+    totalFaces: 0,
+    bounds: new THREE.Box3(),
+    transformSliderScale: state.currentModel.transformSliderScale || 1,
+    generatedAnimations: []
+  };
+  updateGeneratedModelCounts(model);
+  return createMd9ModelForSave(model);
 }
 
 async function exportPartsGlb(indices, filename, options = {}) {
@@ -4158,7 +4236,10 @@ async function replaceEditedPartFromFiles(files) {
   }
   pushUndoSnapshot();
   try {
-    await replacePartWithModelFiles(state.editIndex, modelFile, files, { keepSize: el.replaceKeepSize.checked });
+    await replacePartWithModelFiles(state.editIndex, modelFile, files, {
+      keepSize: el.replaceKeepSize.checked,
+      keepPosition: el.replaceKeepPosition.checked
+    });
     populateSubmeshList(state.currentModel);
     openPartEditor(state.editIndex);
     setStatus(t("replacedPart", { name: state.currentModel.submeshes[state.editIndex].name, mtl: modelFile.name.toLowerCase().endsWith(".obj") && files.some((file) => file.name.toLowerCase().endsWith(".mtl")) ? t("readMtl") : "" }));
@@ -4311,6 +4392,11 @@ async function replacePartWithModelFiles(partIndex, modelFile, files, options = 
   const textureFile = files.find((file) => isTextureFile(file.name));
   const mtlFile = files.find((file) => file.name.toLowerCase().endsWith(".mtl"));
   const part = state.currentModel.submeshes[partIndex];
+  if (/\.md9$/i.test(modelFile.name)) {
+    const model = options.parsedMd9 || parseMd9(await modelFile.arrayBuffer(), modelFile.name, "");
+    await replacePartWithMd9Part(partIndex, model, files);
+    return;
+  }
   const replacement = await parseReplacementModel(modelFile, mtlFile, files);
   if (replacement.positions.length === 0) {
     throw new Error(t("replacementNoMesh"));
@@ -4392,6 +4478,56 @@ async function replacePartWithModelFiles(partIndex, modelFile, files, options = 
   updateModelDerivedData();
 }
 
+async function replacePartWithMd9Part(partIndex, replacementModel, files = [], sourcePart = null) {
+  const part = state.currentModel.submeshes[partIndex];
+  const source = sourcePart || replacementModel.submeshes[0];
+  if (!source) throw new Error(t("replacementNoMesh"));
+  if (source.vertexCount > 65535) throw new Error(t("replacementTooLarge"));
+  const keepName = part.name;
+  const keepParentId = part.parentId;
+  const materialOffset = state.currentModel.materials.length;
+  for (const material of replacementModel.materials) {
+    state.currentModel.materials.push(cloneMaterialState(material));
+  }
+  addReplacementTextureFiles(files, replacementModel);
+  const copied = clonePartForSnapshot(source);
+  part.name = keepName;
+  part.matrix = [...copied.matrix];
+  part.boundingBox = [...copied.boundingBox];
+  part.localPositions = new Float32Array(copied.localPositions);
+  part.normals = new Float32Array(copied.normals);
+  part.uvs = new Float32Array(copied.uvs);
+  part.indices = new Uint16Array(copied.indices);
+  part.materialId = materialOffset + (copied.materialId || 0);
+  part.parentId = keepParentId;
+  part.bonePosition = copied.bonePosition?.clone?.() || part.bonePosition || new THREE.Vector3();
+  part.worldBonePosition = copied.worldBonePosition?.clone?.() || part.worldBonePosition || new THREE.Vector3();
+  part.vertexCount = copied.vertexCount;
+  part.faceCount = copied.faceCount;
+  part.replacement = null;
+  part.initialState = clonePartState(part);
+  syncPartBone(part);
+  const entry = state.meshEntries[partIndex];
+  if (entry) {
+    entry.part = part;
+    entry.material = entry.mesh.material = await createMaterial(state.currentModel.materials[part.materialId], state.currentModel.baseDir);
+  }
+  updatePartGeometry(partIndex);
+  updateModelDerivedData();
+}
+
+function addReplacementTextureFiles(files, replacementModel) {
+  for (const file of files) {
+    if (!isTextureFile(file.name)) continue;
+    state.textureFiles.set(textureKey(file.name), file);
+    if (file.webkitRelativePath) state.textureFiles.set(textureKey(file.webkitRelativePath), file);
+  }
+  for (const material of replacementModel.materials || []) {
+    const match = files.find((file) => isTextureFile(file.name) && textureBaseKey(file.name) === textureBaseKey(material.textureName));
+    if (match) state.textureFiles.set(textureKey(material.textureName), match);
+  }
+}
+
 async function batchReplaceSelectedPartsFromFiles(files) {
   if (!state.currentModel) return;
   const selected = new Set(getSelectedPartIndices());
@@ -4399,7 +4535,7 @@ async function batchReplaceSelectedPartsFromFiles(files) {
     setStatus(t("noSelectedParts"));
     return;
   }
-  const modelFiles = files.filter((file) => /\.(glb|gltf)$/i.test(file.name));
+  const modelFiles = files.filter((file) => /\.(md9|glb|gltf)$/i.test(file.name));
   if (!modelFiles.length) {
     setStatus(t("replacementNeedsModel"));
     return;
@@ -4409,12 +4545,32 @@ async function batchReplaceSelectedPartsFromFiles(files) {
     partByName.set(normalizeMatchName(state.currentModel.submeshes[index].name), index);
   }
   let replaced = 0;
+  const options = {
+    keepSize: el.batchReplaceKeepSize.checked,
+    keepPosition: el.batchReplaceKeepPosition.checked
+  };
   pushUndoSnapshot();
   for (const modelFile of modelFiles) {
-    const index = partByName.get(normalizeMatchName(modelFile.name.replace(/\.[^.]+$/, "")));
+    if (/\.md9$/i.test(modelFile.name)) {
+      try {
+        const parsedMd9 = parseMd9(await modelFile.arrayBuffer(), modelFile.name, "");
+        addReplacementTextureFiles(files, parsedMd9);
+        for (const sourcePart of parsedMd9.submeshes) {
+          const index = partByName.get(normalizeMatchName(sourcePart.name));
+          if (index === undefined) continue;
+          await replacePartWithMd9Part(index, parsedMd9, files, sourcePart);
+          replaced++;
+        }
+      } catch (error) {
+        console.warn(`Batch replacement skipped: ${modelFile.name}`, error);
+      }
+      continue;
+    }
+    const matchName = modelFile.name.replace(/\.[^.]+$/, "");
+    const index = partByName.get(normalizeMatchName(matchName));
     if (index === undefined) continue;
     try {
-      await replacePartWithModelFiles(index, modelFile, files);
+      await replacePartWithModelFiles(index, modelFile, files, options);
       replaced++;
     } catch (error) {
       console.warn(`Batch replacement skipped: ${modelFile.name}`, error);
@@ -6082,7 +6238,9 @@ function findMtlDiffuseTexture(mtlText, files) {
 
 function normalizeReplacementToPart(replacement, part, options = {}) {
   const sourceBox = computeArrayBox(replacement.positions);
-  const targetSource = part.initialState?.localPositions?.length ? part.initialState.localPositions : part.localPositions;
+  const targetSource = options.keepPosition
+    ? part.localPositions
+    : (part.initialState?.localPositions?.length ? part.initialState.localPositions : part.localPositions);
   const targetBox = computeArrayBox(targetSource);
   if (sourceBox.isEmpty() || targetBox.isEmpty()) return;
 
@@ -6485,7 +6643,9 @@ function clearModels() {
   el.duplicatePart.disabled = true;
   el.deletePart.disabled = true;
   el.exportSelectedParts.disabled = true;
+  el.exportSelectedPartsMd9.disabled = true;
   el.batchExportParts.disabled = true;
+  el.batchExportPartsMd9.disabled = true;
   el.batchEditToggle.disabled = true;
   populateEditorForNoSelection();
   setEditorEnabled(false);

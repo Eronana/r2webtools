@@ -1379,6 +1379,13 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
+.replace-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  gap: 12px;
+  align-items: center;
+}
+
 #replaceHint {
   color: var(--muted);
   font-size: 12px;
