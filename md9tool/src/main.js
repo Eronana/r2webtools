@@ -1965,8 +1965,9 @@ async function loadTexture(url, textureName) {
 
 function applyTextureAlphaToMaterial(material, texture) {
   if (!texture?.userData?.hasAlpha) return;
-  material.transparent = true;
+  material.transparent = material.opacity < 0.999;
   material.alphaTest = Math.max(material.alphaTest || 0, 0.01);
+  material.depthWrite = true;
 }
 
 function ensureTextureMatrix(texture) {
@@ -3015,7 +3016,8 @@ async function createAnimatedGlbExportGroup(indices) {
     const entry = state.meshEntries[index];
     const node = exportNodes.get(index);
     if (!entry?.mesh || !node) continue;
-    const mesh = new THREE.Mesh(entry.mesh.geometry.clone(), await cloneExportMaterial(entry.mesh.material));
+    const material = state.currentModel.materials[entry.part?.materialId] || null;
+    const mesh = new THREE.Mesh(entry.mesh.geometry.clone(), await cloneExportMaterial(entry.mesh.material, material, entry.part));
     mesh.name = entry.part?.name || entry.mesh.name || `part_${index}`;
     node.add(mesh);
   }
@@ -3096,7 +3098,8 @@ async function createGlbExportGroup(indices) {
     const geometry = entry.mesh.geometry.clone();
     const matrix = new THREE.Matrix4().multiplyMatrices(inverseRoot, entry.mesh.matrixWorld);
     geometry.applyMatrix4(matrix);
-    const material = await cloneExportMaterial(entry.mesh.material);
+    const md9Material = state.currentModel.materials[entry.part?.materialId] || null;
+    const material = await cloneExportMaterial(entry.mesh.material, md9Material, entry.part);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = entry.part?.name || entry.mesh.name || `part_${index}`;
     group.add(mesh);
@@ -3104,21 +3107,38 @@ async function createGlbExportGroup(indices) {
   return group;
 }
 
-async function cloneExportMaterial(material) {
+async function cloneExportMaterial(material, md9Material = null, part = null) {
   const source = Array.isArray(material) ? material[0] : material;
   const clone = source?.clone?.() || new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-  clone.side = THREE.DoubleSide;
+  clone.side = getGlbExportMaterialSide(md9Material, part);
   clone.wireframe = false;
+  clone.userData = { ...(clone.userData || {}) };
+  if (md9Material?.textureName) {
+    clone.userData.md9TextureName = md9Material.textureName;
+    clone.userData.md9NoCull = isNoCullTextureName(md9Material.textureName);
+  }
   if (clone.map) {
     const converted = await createAlphaPngTexture(clone.map);
     clone.map = converted.texture || clone.map.clone();
     clone.map.needsUpdate = true;
-    if (converted.hasAlpha || clone.opacity < 1) {
+    if (converted.hasAlpha) {
+      clone.alphaTest = Math.max(clone.alphaTest || 0, 0.01);
+      clone.depthWrite = true;
+      clone.transparent = clone.opacity < 0.999;
+    } else if (clone.opacity < 1) {
       clone.transparent = true;
-      clone.alphaTest = Math.min(clone.alphaTest || 0.001, 0.001);
     }
   }
   return clone;
+}
+
+function getGlbExportMaterialSide(md9Material, part = null) {
+  if (isTrackBinModel() && part) return part.trackCullFlag === 0 ? THREE.DoubleSide : THREE.FrontSide;
+  return isNoCullTextureName(md9Material?.textureName) ? THREE.DoubleSide : THREE.FrontSide;
+}
+
+function isNoCullTextureName(textureName) {
+  return /^nocull_/i.test(String(textureName || "").split(/[\\/]/).pop() || "");
 }
 
 async function createAlphaPngTexture(sourceTexture) {
@@ -4425,6 +4445,7 @@ async function parseReplacementModel(modelFile, mtlFile, files) {
 }
 
 function createMd9MaterialFromThree(threeMaterial, textureName, templateMaterial = null, options = {}) {
+  const md9TextureName = normalizeImportedMd9TextureName(textureName, threeMaterial, options);
   if (textureName && templateMaterial) {
     return {
       diffuse: [...templateMaterial.diffuse],
@@ -4432,7 +4453,7 @@ function createMd9MaterialFromThree(threeMaterial, textureName, templateMaterial
       specular: [...templateMaterial.specular],
       emissive: [...templateMaterial.emissive],
       power: templateMaterial.power,
-      textureName,
+      textureName: md9TextureName,
       extra: templateMaterial.extra ? [...templateMaterial.extra] : []
     };
   }
@@ -4444,9 +4465,19 @@ function createMd9MaterialFromThree(threeMaterial, textureName, templateMaterial
     specular: [0, 0, 0, 1],
     emissive: [0, 0, 0, 1],
     power: 0,
-    textureName,
+    textureName: md9TextureName,
     extra: (options.newFormat ?? state.currentModel?.newFormat ?? true) ? new Array(16).fill(0) : []
   };
+}
+
+function normalizeImportedMd9TextureName(textureName, threeMaterial, options = {}) {
+  const explicit = threeMaterial?.userData?.md9TextureName;
+  let name = explicit || textureName || "";
+  const noCull = options.noCull ?? threeMaterial?.userData?.md9NoCull ?? threeMaterial?.side === THREE.DoubleSide;
+  if (name && noCull && !isNoCullTextureName(name) && !isTrackBinModel()) {
+    name = `Nocull_${name}`;
+  }
+  return name;
 }
 
 function clonePreviewMaterial(material) {
@@ -4582,7 +4613,8 @@ async function createMd9FromSkinnedGltf(modelFile, files, options) {
   let previewTexture = null;
   if (textureSources.length) {
     const atlas = await buildTextureAtlas(textureSources);
-    material = createMd9MaterialFromThree(null, makePartTextureName(modelFile.name.replace(/\.[^.]+$/, "")), null, { newFormat: true });
+    const noCull = hasNoCullTextureSources(textureSources);
+    material = createMd9MaterialFromThree(null, makePartTextureName(modelFile.name.replace(/\.[^.]+$/, ""), { noCull }), null, { newFormat: true, noCull });
     material.atlasSourceImage = atlas.canvas;
     material.atlasHasAlpha = atlas.hasAlpha;
     for (const ref of activeVertexRefs) {
@@ -4654,7 +4686,8 @@ async function createMd9FromRigidGltf(gltf, modelFile, files) {
   let previewTexture = null;
   if (textureSources.length) {
     const atlas = await buildTextureAtlas(textureSources);
-    material = createMd9MaterialFromThree(null, makePartTextureName(modelFile.name.replace(/\.[^.]+$/, "")), null, { newFormat: true });
+    const noCull = hasNoCullTextureSources(textureSources);
+    material = createMd9MaterialFromThree(null, makePartTextureName(modelFile.name.replace(/\.[^.]+$/, ""), { noCull }), null, { newFormat: true, noCull });
     material.atlasSourceImage = atlas.canvas;
     material.atlasHasAlpha = atlas.hasAlpha;
     for (const ref of vertexRefSources) {
@@ -5753,6 +5786,15 @@ function registerTextureSource(textureSources, material, files) {
   return textureSources.length - 1;
 }
 
+function hasNoCullTextureSources(textureSources) {
+  return textureSources.some((source) => isThreeMaterialNoCull(source.material));
+}
+
+function isThreeMaterialNoCull(material) {
+  const source = Array.isArray(material) ? material[0] : material;
+  return Boolean(source?.userData?.md9NoCull || source?.side === THREE.DoubleSide);
+}
+
 function getGltfWorldVertex(object, geometry, positionAttribute, index, target) {
   target.fromBufferAttribute(positionAttribute, index);
   if (object.isSkinnedMesh) {
@@ -5864,7 +5906,7 @@ async function bakeReplacementTextures(replacement) {
     map: texture,
     color: 0xffffff,
     side: THREE.DoubleSide,
-    transparent: atlas.hasAlpha,
+    transparent: false,
     alphaTest: atlas.hasAlpha ? 0.001 : 0
   });
 }
@@ -6361,10 +6403,12 @@ function makeAtlasTextureName() {
   return `${base}_atlas`.slice(0, 27);
 }
 
-function makePartTextureName(partName) {
+function makePartTextureName(partName, options = {}) {
   const base = String(partName || "texture");
   if (isTrackBinModel()) return normalizeModelTextureName(base, { defaultExt: ".dds", maxLength: 63 });
-  return normalizeModelTextureName(base.toLowerCase().startsWith("nocull_") ? base : `Nocull_${base}`, { defaultExt: ".dds", maxLength: 31 });
+  const noCull = options.noCull ?? true;
+  const named = noCull && !isNoCullTextureName(base) ? `Nocull_${base}` : base;
+  return normalizeModelTextureName(named, { defaultExt: ".dds", maxLength: 31 });
 }
 
 function sanitizeFilename(name) {
