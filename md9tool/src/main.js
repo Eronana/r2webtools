@@ -3647,6 +3647,7 @@ function updatePartGeometryAttributes(index) {
   if (!part || !geometry) return;
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(part.localPositions, 3));
   geometry.setAttribute("normal", new THREE.Float32BufferAttribute(part.normals, 3));
+  geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   if (el.showNormals.checked) rebuildNormalVisualizers();
   if (index === state.highlightedPartIndex) refreshHighlightedMaterial();
