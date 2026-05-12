@@ -8395,8 +8395,11 @@ async function saveCurrentModel() {
     const modelBytes = isTrackBin
       ? serializeTrackBin(createBakedTrackModelForSave(state.currentModel))
       : serializeMd9(createMd9ModelForSave(state.currentModel));
-    for (const animation of isTrackBin ? [] : (state.currentModel.generatedAnimations || [])) {
-      zipEntries.push({ name: sanitizeFilename(animation.name || "animation.ani"), data: new Blob([serializeAni(animation)], { type: "application/octet-stream" }) });
+    for (const animationEntry of isTrackBin ? [] : await getModelSaveAnimationEntries(state.currentModel)) {
+      zipEntries.push({
+        name: animationEntry.name,
+        data: new Blob([serializeAni(animationEntry.animation)], { type: "application/octet-stream" })
+      });
     }
     zipEntries.unshift({ name: `${baseName}${extension}`, data: new Blob([modelBytes], { type: "application/octet-stream" }) });
     zipEntries.push(...getSaveDependencyEntries(state.currentModel, zipEntries));
@@ -8410,6 +8413,30 @@ async function saveCurrentModel() {
     restoreSaveMutationSnapshot(state.currentModel, saveSnapshot);
     el.saveModel.disabled = !state.currentModel;
   }
+}
+
+async function getModelSaveAnimationEntries(model) {
+  const entries = new Map();
+  const add = (name, animation) => {
+    if (!animation) return;
+    const filename = sanitizeFilename(name || animation.name || "animation.ani");
+    entries.set(textureKey(filename), { name: filename, animation });
+  };
+
+  for (const animation of model.generatedAnimations || []) {
+    add(animation.name, animation);
+  }
+  for (const item of state.aniFiles) {
+    if (item.modelId && item.modelId !== state.currentMd9Id) continue;
+    try {
+      if (!item.animation && item.file) item.animation = parseAni(await item.file.arrayBuffer(), item.label);
+      const name = item.label?.split(/[\\/]/).pop() || item.animation?.name || "animation.ani";
+      add(name, item.animation);
+    } catch (error) {
+      console.warn(`ANI save skipped: ${item.label}`, error);
+    }
+  }
+  return [...entries.values()];
 }
 
 function nextFrame() {
