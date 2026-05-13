@@ -8247,12 +8247,64 @@ function updateMissingTextures(model) {
     status.textContent = material.textureName && state.missingTextures.has(material.textureName)
       ? t("textureMissing")
       : "";
+    const colorPicker = document.createElement("input");
+    colorPicker.type = "color";
+    colorPicker.className = "material-diffuse-picker";
+    colorPicker.value = materialDiffuseRgbToHex(material);
+    colorPicker.title = "Diffuse RGB";
+    colorPicker.addEventListener("input", () => applyMaterialDiffuseRgb(materialIndex, colorPicker.value));
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.textContent = t("deleteTexture");
     deleteButton.addEventListener("click", () => deleteMaterialTexture(materialIndex));
-    row.append(id, input, status, deleteButton);
+    row.append(id, input, status, colorPicker, deleteButton);
     el.missingTextures.append(row);
+  }
+}
+
+function materialDiffuseRgbToHex(material) {
+  const diffuse = material?.diffuse || [0, 0, 0, 1];
+  const bytes = [0, 1, 2].map((index) => {
+    const value = Number.isFinite(diffuse[index]) ? diffuse[index] : 0;
+    return Math.round(THREE.MathUtils.clamp(value, 0, 1) * 255).toString(16).padStart(2, "0");
+  });
+  return `#${bytes.join("")}`;
+}
+
+function applyMaterialDiffuseRgb(materialIndex, value) {
+  const material = state.currentModel?.materials?.[materialIndex];
+  const match = String(value || "").match(/^#?([0-9a-fA-F]{6})$/);
+  if (!material || !match) return;
+  const hex = match[1];
+  const next = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
+  const diffuse = material.diffuse || [0, 0, 0, 1];
+  if (next.every((component, index) => Math.abs(component - (diffuse[index] ?? 0)) < 0.000001)) return;
+  pushUndoSnapshot();
+  material.diffuse = [
+    next[0],
+    next[1],
+    next[2],
+    Number.isFinite(diffuse[3]) ? diffuse[3] : 1
+  ];
+  syncRenderedDiffuseRgb(materialIndex);
+}
+
+function syncRenderedDiffuseRgb(materialIndex) {
+  const material = state.currentModel?.materials?.[materialIndex];
+  if (!material) return;
+  for (const [index, entry] of state.meshEntries.entries()) {
+    if (entry.part?.materialId !== materialIndex || !entry.material) continue;
+    if (getMaterialBaseMap(entry.material)) {
+      entry.material.color.set(0xffffff);
+    } else {
+      entry.material.color.setRGB(
+        material.diffuse?.[0] ?? 0.72,
+        material.diffuse?.[1] ?? 0.72,
+        material.diffuse?.[2] ?? 0.72
+      );
+    }
+    entry.material.needsUpdate = true;
+    if (index === state.highlightedPartIndex) refreshHighlightedMaterial();
   }
 }
 
