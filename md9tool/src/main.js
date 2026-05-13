@@ -114,6 +114,7 @@ const el = {
   batchEditReset: document.querySelector("#batchEditReset"),
   batchEditPanel: document.querySelector("#batchEditPanel"),
   batchTransformEditor: document.querySelector("#batchTransformEditor"),
+  partSelectionSummary: document.querySelector("#partSelectionSummary"),
   submeshList: document.querySelector("#submeshList"),
   partFilter: document.querySelector("#partFilter"),
   editorBlock: document.querySelector("#editorBlock"),
@@ -185,6 +186,7 @@ const ANIMATION_FPS = 90;
 // 0xff6aa8 pink, visible on skin/cloth but more playful.
 // 0xffffff white, neutral but weaker on pale textures.
 const PART_HIGHLIGHT_COLOR = 0xff6aa8;
+const PART_SELECTION_COLOR = 0x5bb2ff;
 const PART_PICK_DRAG_THRESHOLD = 4;
 const POINTER_LOCK_ROTATE_SPEED = 0.005;
 const DDS_BLOCK_SIZE = 4;
@@ -731,6 +733,7 @@ const state = {
   highlightedPartIndex: -1,
   highlightedMaterial: null,
   highlightedHelper: null,
+  selectedPartHelpers: [],
   meshNameLabels: [],
   cameraKeys: new Set(),
   cameraDragPointerId: null,
@@ -774,6 +777,10 @@ const state = {
   keepMatrixEditorMatrix: new THREE.Matrix4(),
   keepMatrixEditorPartIndex: -1,
   batchSelectedParts: new Set(),
+  partSelectionAnchorIndex: -1,
+  partPickModifiers: { multi: false, shift: false },
+  partMultiModifierDown: false,
+  partShiftModifierDown: false,
   undoStack: [],
   redoStack: [],
   restoringHistory: false,
@@ -1078,6 +1085,7 @@ function resetOpenedFiles() {
   state.redoStack = [];
   state.editIndex = -1;
   state.batchSelectedParts = new Set();
+  state.partSelectionAnchorIndex = -1;
   el.saveModel.disabled = true;
   el.saveAnimation.disabled = true;
   el.scaleModelHeight.disabled = true;
@@ -1225,6 +1233,7 @@ async function showModel(model, label) {
   state.editIndex = -1;
   state.highlightedPartIndex = -1;
   state.batchSelectedParts = new Set();
+  state.partSelectionAnchorIndex = -1;
   if (!state.restoringHistory) {
     state.undoStack = [];
     state.redoStack = [];
@@ -1711,7 +1720,8 @@ function cloneModelSnapshot(model) {
     })),
     generatedAnimations: model.generatedAnimations || [],
     highlightedPartIndex: state.highlightedPartIndex,
-    batchSelectedParts: [...state.batchSelectedParts]
+    batchSelectedParts: [...state.batchSelectedParts],
+    partSelectionAnchorIndex: state.partSelectionAnchorIndex
   };
 }
 
@@ -1779,6 +1789,7 @@ async function restoreModelSnapshot(snapshot) {
     updateGeneratedModelCounts(model);
     await showModel(model, model.name);
     state.batchSelectedParts = new Set(snapshot.batchSelectedParts || []);
+    state.partSelectionAnchorIndex = Number.isInteger(snapshot.partSelectionAnchorIndex) ? snapshot.partSelectionAnchorIndex : -1;
     populateSubmeshList(model);
     if (snapshot.highlightedPartIndex >= 0 && model.submeshes[snapshot.highlightedPartIndex]) {
       setHighlightedPart(snapshot.highlightedPartIndex);
@@ -2395,9 +2406,22 @@ function populateSubmeshList(model) {
     row.className = "submesh-row";
     row.dataset.partIndex = String(index);
     row.classList.toggle("highlighted", state.highlightedPartIndex === index);
+    row.classList.toggle("selected", state.batchSelectedParts.has(index));
+    row.addEventListener("pointerdown", (event) => {
+      if (isPartRowControlTarget(event.target)) return;
+      if (!isPartRangeSelectEvent(event) && !isPartMultiSelectEvent(event)) return;
+      event.preventDefault();
+      row.dataset.skipSelectionClick = "1";
+      selectPartFromInteraction(index, event);
+    });
     row.addEventListener("click", (event) => {
-      if (event.target.closest("button,input,label")) return;
-      setHighlightedPart(index);
+      if (isPartRowControlTarget(event.target)) return;
+      if (row.dataset.skipSelectionClick === "1") {
+        row.dataset.skipSelectionClick = "";
+        return;
+      }
+      if (isPartRangeSelectEvent(event) || isPartMultiSelectEvent(event)) event.preventDefault();
+      selectPartFromInteraction(index, event);
     });
     const visibleCheckbox = document.createElement("input");
     visibleCheckbox.type = "checkbox";
@@ -2408,14 +2432,10 @@ function populateSubmeshList(model) {
     });
     const editCheckbox = document.createElement("input");
     editCheckbox.type = "checkbox";
+    editCheckbox.dataset.partSelectIndex = String(index);
     editCheckbox.checked = state.batchSelectedParts.has(index);
     editCheckbox.addEventListener("input", () => {
-      if (editCheckbox.checked) {
-        state.batchSelectedParts.add(index);
-      } else {
-        state.batchSelectedParts.delete(index);
-      }
-      updateBatchActionState();
+      togglePartCheckboxSelection(index, editCheckbox.checked);
     });
     const name = document.createElement("span");
     name.textContent = part.name;
@@ -2431,6 +2451,7 @@ function populateSubmeshList(model) {
     row.append(visibleCheckbox, editCheckbox, id, name, count, exportButton);
     el.submeshList.append(row);
   }
+  updatePartSelectionSummary(filteredIndices.length);
 }
 
 function getFilteredPartIndices(model) {
@@ -2451,12 +2472,108 @@ function createHeaderCheckboxCell(input, text) {
   return cell;
 }
 
-function setHighlightedPart(index) {
-  if (!state.currentModel || !state.meshEntries[index]?.mesh) {
-    clearHighlightedPart();
+function isPartRowControlTarget(target) {
+  return target instanceof Element && Boolean(target.closest("button,input,label"));
+}
+
+function isPartMultiSelectEvent(event, fallback = false) {
+  const meta = Boolean(event?.metaKey || event?.getModifierState?.("Meta") || event?.getModifierState?.("OS"));
+  const ctrl = Boolean(event?.ctrlKey || event?.getModifierState?.("Control"));
+  return meta || ctrl || fallback || state.partMultiModifierDown;
+}
+
+function isPartRangeSelectEvent(event, fallback = false) {
+  return Boolean(event?.shiftKey || event?.getModifierState?.("Shift") || fallback || state.partShiftModifierDown);
+}
+
+function selectPartFromInteraction(index, event) {
+  if (!state.currentModel || !state.meshEntries[index]?.mesh) return;
+  const additive = isPartMultiSelectEvent(event);
+  if (isPartRangeSelectEvent(event)) {
+    selectPartRange(index, additive);
     return;
   }
+  if (additive) {
+    if (state.batchSelectedParts.has(index)) {
+      state.batchSelectedParts.delete(index);
+      if (state.highlightedPartIndex === index) {
+        const fallback = getNearestSelectedPartIndex(index);
+        if (fallback >= 0) {
+          setHighlightedPart(fallback);
+        } else {
+          clearHighlightedPart();
+        }
+      } else {
+        updateHighlightedRows();
+        updateBatchActionState();
+      }
+    } else {
+      state.batchSelectedParts.add(index);
+      state.partSelectionAnchorIndex = index;
+      setHighlightedPart(index);
+    }
+    return;
+  }
+  state.batchSelectedParts = new Set([index]);
+  state.partSelectionAnchorIndex = index;
+  setHighlightedPart(index);
+}
+
+function selectPartRange(index, additive = false) {
+  if (!state.currentModel || !state.meshEntries[index]?.mesh) return;
+  const anchor = state.partSelectionAnchorIndex >= 0 && state.meshEntries[state.partSelectionAnchorIndex]?.mesh
+    ? state.partSelectionAnchorIndex
+    : (state.highlightedPartIndex >= 0 ? state.highlightedPartIndex : index);
+  if (!additive) state.batchSelectedParts = new Set();
+  const start = Math.min(anchor, index);
+  const end = Math.max(anchor, index);
+  for (let partIndex = start; partIndex <= end; partIndex++) {
+    if (state.meshEntries[partIndex]?.mesh) state.batchSelectedParts.add(partIndex);
+  }
+  if (state.partSelectionAnchorIndex < 0) state.partSelectionAnchorIndex = anchor;
+  setHighlightedPart(index);
+}
+
+function togglePartCheckboxSelection(index, selected) {
+  if (!state.currentModel || !state.meshEntries[index]?.mesh) return;
+  if (selected) {
+    state.batchSelectedParts.add(index);
+    state.partSelectionAnchorIndex = index;
+    setHighlightedPart(index);
+    return;
+  }
+  state.batchSelectedParts.delete(index);
+  if (state.partSelectionAnchorIndex === index) state.partSelectionAnchorIndex = getNearestSelectedPartIndex(index);
   if (state.highlightedPartIndex === index) {
+    const fallback = getNearestSelectedPartIndex(index);
+    if (fallback >= 0) {
+      setHighlightedPart(fallback);
+    } else {
+      clearHighlightedPart();
+    }
+  } else {
+    updateHighlightedRows();
+    updateBatchActionState();
+  }
+}
+
+function getNearestSelectedPartIndex(referenceIndex) {
+  const selected = getSelectedPartIndices();
+  if (!selected.length) return -1;
+  let best = selected[0];
+  let bestDistance = Math.abs(best - referenceIndex);
+  for (const index of selected) {
+    const distance = Math.abs(index - referenceIndex);
+    if (distance < bestDistance) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function setHighlightedPart(index) {
+  if (!state.currentModel || !state.meshEntries[index]?.mesh) {
     clearHighlightedPart();
     return;
   }
@@ -2466,8 +2583,7 @@ function setHighlightedPart(index) {
   updateHighlightedRows();
   scrollHighlightedPartIntoView(index);
   updateHighlightInfo();
-  el.duplicatePart.disabled = false;
-  el.deletePart.disabled = false;
+  updateBatchActionState();
   openPartEditor(index);
 }
 
@@ -2476,8 +2592,7 @@ function clearHighlightedPart() {
   state.highlightedPartIndex = -1;
   updateHighlightedRows();
   updateHighlightInfo();
-  el.duplicatePart.disabled = true;
-  el.deletePart.disabled = true;
+  updateBatchActionState();
   state.editIndex = -1;
   populateEditorForNoSelection();
   setEditorEnabled(false);
@@ -2646,13 +2761,49 @@ function refreshHighlightedMaterial() {
 
 function updateHighlightedRows() {
   for (const row of el.submeshList.querySelectorAll("[data-part-index]")) {
-    row.classList.toggle("highlighted", Number(row.dataset.partIndex) === state.highlightedPartIndex);
+    const index = Number(row.dataset.partIndex);
+    row.classList.toggle("highlighted", index === state.highlightedPartIndex);
+    row.classList.toggle("selected", state.batchSelectedParts.has(index));
+    const checkbox = row.querySelector("[data-part-select-index]");
+    if (checkbox) checkbox.checked = state.batchSelectedParts.has(index);
   }
+  updateSelectedPartHelpers();
+  updatePartSelectionSummary();
 }
 
 function scrollHighlightedPartIntoView(index = state.highlightedPartIndex) {
   const row = el.submeshList.querySelector(`[data-part-index="${index}"]`);
   row?.scrollIntoView?.({ block: "nearest" });
+}
+
+function clearSelectedPartHelpers() {
+  for (const helper of state.selectedPartHelpers) {
+    helper.parent?.remove(helper);
+    disposeObject(helper);
+  }
+  state.selectedPartHelpers = [];
+}
+
+function updateSelectedPartHelpers() {
+  clearSelectedPartHelpers();
+  if (!state.currentModel) return;
+  for (const index of getSelectedPartIndices()) {
+    if (index === state.highlightedPartIndex) continue;
+    const entry = state.meshEntries[index];
+    if (!entry?.mesh || !entry.part) continue;
+    const helper = isTrackBinModel()
+      ? createTrackLocalBoundingBoxHelper(entry.mesh, entry.part, PART_SELECTION_COLOR)
+      : new THREE.BoxHelper(entry.mesh, PART_SELECTION_COLOR);
+    helper.name = `${entry.part.name || entry.mesh.name || "part"} selected bounds`;
+    helper.renderOrder = 998;
+    helper.material.depthTest = false;
+    if (isTrackBinModel()) {
+      entry.mesh.add(helper);
+    } else {
+      scene.add(helper);
+    }
+    state.selectedPartHelpers.push(helper);
+  }
 }
 
 function updateHighlightInfo() {
@@ -2728,13 +2879,18 @@ function setAllPartsVisible(visible, indices = state.meshEntries.map((_, index) 
     }
   }
   populateSubmeshList(state.currentModel);
+  updateHighlightedRows();
 }
 
 function setAllPartsSelected(selected, indices = state.currentModel.submeshes.map((_, index) => index)) {
   if (selected) {
     for (const index of indices) state.batchSelectedParts.add(index);
+    if (state.partSelectionAnchorIndex < 0 && indices.length) state.partSelectionAnchorIndex = indices[0];
   } else {
     for (const index of indices) state.batchSelectedParts.delete(index);
+    if (state.partSelectionAnchorIndex >= 0 && !state.batchSelectedParts.has(state.partSelectionAnchorIndex)) {
+      state.partSelectionAnchorIndex = getNearestSelectedPartIndex(state.partSelectionAnchorIndex);
+    }
   }
   populateSubmeshList(state.currentModel);
 }
@@ -2745,13 +2901,33 @@ function getSelectedPartIndices() {
     .sort((a, b) => a - b);
 }
 
+function getActionPartIndices() {
+  const selected = getSelectedPartIndices();
+  if (selected.length) return selected;
+  return state.highlightedPartIndex >= 0 && state.meshEntries[state.highlightedPartIndex]?.mesh
+    ? [state.highlightedPartIndex]
+    : [];
+}
+
 function updateBatchActionState() {
   const hasSelection = Boolean(state.currentModel && getSelectedPartIndices().length);
+  const hasActionPart = hasSelection || Boolean(state.currentModel && state.highlightedPartIndex >= 0 && state.meshEntries[state.highlightedPartIndex]?.mesh);
   el.exportSelectedParts.disabled = !hasSelection;
   el.exportSelectedPartsMd9.disabled = !hasSelection || isTrackBinModel();
   el.batchExportParts.disabled = !hasSelection;
   el.batchExportPartsMd9.disabled = !hasSelection || isTrackBinModel();
   el.batchEditToggle.disabled = !state.currentModel;
+  el.duplicatePart.disabled = !hasActionPart;
+  el.deletePart.disabled = !hasActionPart;
+  updatePartSelectionSummary();
+}
+
+function updatePartSelectionSummary(shownCount = null) {
+  if (!el.partSelectionSummary) return;
+  const total = state.currentModel?.submeshes?.length || 0;
+  const shown = shownCount ?? (state.currentModel ? getFilteredPartIndices(state.currentModel).length : 0);
+  const editCount = getSelectedPartIndices().length;
+  el.partSelectionSummary.textContent = `总部件: ${total} | 展示: ${shown} | 编辑: ${editCount}`;
 }
 
 function openPartEditor(index) {
@@ -2887,6 +3063,7 @@ function sortTrackPartsForDisplay(selectedPart = null) {
   state.batchSelectedParts = new Set([...state.batchSelectedParts]
     .map((oldIndex) => oldToNew.get(oldIndex))
     .filter((index) => Number.isInteger(index)));
+  if (state.partSelectionAnchorIndex >= 0) state.partSelectionAnchorIndex = oldToNew.get(state.partSelectionAnchorIndex) ?? -1;
   if (state.editIndex >= 0) state.editIndex = oldToNew.get(state.editIndex) ?? -1;
   if (state.highlightedPartIndex >= 0) state.highlightedPartIndex = oldToNew.get(state.highlightedPartIndex) ?? -1;
   rebuildNormalVisualizers();
@@ -3964,75 +4141,98 @@ function addPart() {
   rebuildSceneHelpers();
   updateModelDerivedData();
   populateSubmeshList(state.currentModel);
+  state.batchSelectedParts = new Set([state.editIndex]);
+  state.partSelectionAnchorIndex = state.editIndex;
   setHighlightedPart(state.editIndex);
 }
 
 function duplicateHighlightedPart() {
-  const sourceIndex = state.highlightedPartIndex;
-  if (!state.currentModel || sourceIndex < 0 || !state.meshEntries[sourceIndex]) return;
+  const sourceIndices = getActionPartIndices();
+  if (!state.currentModel || !sourceIndices.length) return;
   pushUndoSnapshot();
-  const sourcePart = state.currentModel.submeshes[sourceIndex];
-  const sourceEntry = state.meshEntries[sourceIndex];
-  const duplicateTrackIndexId = isTrackBinModel() ? getNextTrackIndexId(sourcePart.trackSectionId ?? 0) : -1;
-  const part = {
-    name: isTrackBinModel() ? makeTrackPartName(sourcePart.trackSectionId ?? 0, duplicateTrackIndexId) : makeUniqueCopyPartName(sourcePart.name),
-    matrix: isTrackBinModel() ? createIdentityMatrixArray() : (sourcePart.matrix ? [...sourcePart.matrix] : createIdentityMatrixArray()),
-    boundingBox: [...sourcePart.boundingBox],
-    localPositions: new Float32Array(sourcePart.localPositions),
-    normals: new Float32Array(sourcePart.normals),
-    uvs: new Float32Array(sourcePart.uvs),
-    indices: new Uint16Array(sourcePart.indices),
-    materialId: sourcePart.materialId,
-    parentId: sourcePart.parentId,
-    vertexCount: sourcePart.vertexCount,
-    faceCount: sourcePart.faceCount,
-    bonePosition: sourcePart.bonePosition?.clone?.() || new THREE.Vector3(),
-    worldBonePosition: sourcePart.worldBonePosition?.clone?.() || new THREE.Vector3(),
-    replacement: null
-  };
-  copyTrackPartMetadata(sourcePart, part);
-  if (isTrackBinModel()) {
-    part.parentId = -1;
-    part.trackIndexId = duplicateTrackIndexId;
+  const sourceToDuplicate = new Map();
+  const duplicates = [];
+  for (const sourceIndex of sourceIndices) {
+    const sourcePart = state.currentModel.submeshes[sourceIndex];
+    const sourceEntry = state.meshEntries[sourceIndex];
+    if (!sourcePart || !sourceEntry) continue;
+    const duplicateTrackIndexId = isTrackBinModel() ? getNextTrackIndexId(sourcePart.trackSectionId ?? 0) : -1;
+    const part = {
+      name: isTrackBinModel() ? makeTrackPartName(sourcePart.trackSectionId ?? 0, duplicateTrackIndexId) : makeUniqueCopyPartName(sourcePart.name),
+      matrix: isTrackBinModel() ? createIdentityMatrixArray() : (sourcePart.matrix ? [...sourcePart.matrix] : createIdentityMatrixArray()),
+      boundingBox: [...sourcePart.boundingBox],
+      localPositions: new Float32Array(sourcePart.localPositions),
+      normals: new Float32Array(sourcePart.normals),
+      uvs: new Float32Array(sourcePart.uvs),
+      indices: new Uint16Array(sourcePart.indices),
+      materialId: sourcePart.materialId,
+      parentId: sourcePart.parentId,
+      vertexCount: sourcePart.vertexCount,
+      faceCount: sourcePart.faceCount,
+      bonePosition: sourcePart.bonePosition?.clone?.() || new THREE.Vector3(),
+      worldBonePosition: sourcePart.worldBonePosition?.clone?.() || new THREE.Vector3(),
+      replacement: null
+    };
+    copyTrackPartMetadata(sourcePart, part);
+    if (isTrackBinModel()) {
+      part.parentId = -1;
+      part.trackIndexId = duplicateTrackIndexId;
+    }
+    part.initialState = clonePartState(part);
+    const newIndex = state.currentModel.submeshes.length;
+    state.currentModel.submeshes.push(part);
+    sourceToDuplicate.set(sourceIndex, newIndex);
+
+    const transform = isTrackBinModel()
+      ? { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) }
+      : getPartTransform(part);
+    const node = new THREE.Group();
+    node.name = `${part.name} bone`;
+    node.position.copy(transform.position);
+    node.quaternion.copy(transform.quaternion);
+    node.scale.copy(transform.scale);
+    node.userData.defaultPosition = transform.position.clone();
+    node.userData.defaultQuaternion = transform.quaternion.clone();
+    node.userData.defaultScale = transform.scale.clone();
+    state.boneNodes.set(part.name, node);
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(part.localPositions, 3));
+    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(part.normals, 3));
+    geometry.setAttribute("uv", new THREE.Float32BufferAttribute(part.uvs, 2));
+    geometry.setIndex(new THREE.Uint16BufferAttribute(part.indices, 1));
+    geometry.computeBoundingSphere();
+    const sourceMaterial = sourceEntry.material || sourceEntry.mesh?.material || state.meshEntries[0]?.material || new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    const material = isTrackBinModel() ? cloneRenderableMaterial(sourceMaterial) : sourceMaterial;
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = part.name;
+    mesh.userData.part = part;
+    node.add(mesh);
+    state.meshEntries.push({ mesh, material, part });
+    duplicates.push({ sourceIndex, part, node });
   }
-  part.initialState = clonePartState(part);
-  state.currentModel.submeshes.push(part);
-
-  const transform = isTrackBinModel()
-    ? { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1) }
-    : getPartTransform(part);
-  const node = new THREE.Group();
-  node.name = `${part.name} bone`;
-  node.position.copy(transform.position);
-  node.quaternion.copy(transform.quaternion);
-  node.scale.copy(transform.scale);
-  node.userData.defaultPosition = transform.position.clone();
-  node.userData.defaultQuaternion = transform.quaternion.clone();
-  node.userData.defaultScale = transform.scale.clone();
-  state.boneNodes.set(part.name, node);
-  const parentPart = isTrackBinModel() ? null : state.currentModel.submeshes[part.parentId];
-  (parentPart ? state.boneNodes.get(parentPart.name) : state.root)?.add(node);
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(part.localPositions, 3));
-  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(part.normals, 3));
-  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(part.uvs, 2));
-  geometry.setIndex(new THREE.Uint16BufferAttribute(part.indices, 1));
-  geometry.computeBoundingSphere();
-  const sourceMaterial = sourceEntry.material || sourceEntry.mesh?.material || state.meshEntries[0]?.material || new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-  const material = isTrackBinModel() ? cloneRenderableMaterial(sourceMaterial) : sourceMaterial;
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.name = part.name;
-  mesh.userData.part = part;
-  node.add(mesh);
-  state.meshEntries.push({ mesh, material, part });
-  if (isTrackBinModel()) syncTrackPartMeshTransform(state.meshEntries.length - 1);
-
-  const newIndex = isTrackBinModel() ? sortTrackPartsForDisplay(part) : state.currentModel.submeshes.length - 1;
+  for (const duplicate of duplicates) {
+    if (!isTrackBinModel() && sourceToDuplicate.has(duplicate.part.parentId)) {
+      duplicate.part.parentId = sourceToDuplicate.get(duplicate.part.parentId);
+    }
+    const parentPart = isTrackBinModel() ? null : state.currentModel.submeshes[duplicate.part.parentId];
+    (parentPart ? state.boneNodes.get(parentPart.name) : state.root)?.add(duplicate.node);
+  }
+  for (let index = state.currentModel.submeshes.length - duplicates.length; index < state.currentModel.submeshes.length; index++) {
+    if (isTrackBinModel()) syncTrackPartMeshTransform(index);
+  }
+  if (isTrackBinModel() && duplicates.length) sortTrackPartsForDisplay(duplicates[duplicates.length - 1].part);
+  const newIndices = duplicates
+    .map((duplicate) => state.currentModel.submeshes.indexOf(duplicate.part))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b);
+  const newIndex = newIndices[newIndices.length - 1] ?? -1;
   rebuildSceneHelpers();
   updateModelDerivedData();
   populateSubmeshList(state.currentModel);
-  setHighlightedPart(newIndex);
+  state.batchSelectedParts = new Set(newIndices);
+  state.partSelectionAnchorIndex = newIndices[0] ?? -1;
+  if (newIndex >= 0) setHighlightedPart(newIndex);
 }
 
 function makeUniqueNewPartName() {
@@ -4175,53 +4375,69 @@ function clearEditedPartMesh() {
 }
 
 function deleteEditedPart() {
-  if (!state.currentModel || state.editIndex < 0) return;
-  if (state.currentModel.submeshes.length <= 1) {
+  const deleteIndices = getActionPartIndices();
+  if (!state.currentModel || !deleteIndices.length) return;
+  if (state.currentModel.submeshes.length <= deleteIndices.length) {
     setStatus(t("cannotDeleteLast"));
     return;
   }
   pushUndoSnapshot();
-  const deleteIndex = state.editIndex;
-  const highlightedIndex = state.highlightedPartIndex;
-  if (highlightedIndex === deleteIndex) clearHighlightedPart();
-  const deleted = state.currentModel.submeshes[deleteIndex];
-  const deletedParentId = deleted.parentId;
-  const deletedNode = state.boneNodes.get(deleted.name);
-  const targetParentPart = state.currentModel.submeshes[deletedParentId];
-  const targetParentNode = targetParentPart ? state.boneNodes.get(targetParentPart.name) : state.root;
-
-  for (const part of state.currentModel.submeshes) {
-    if (part.parentId === deleteIndex) part.parentId = deletedParentId;
+  const deleteSet = new Set(deleteIndices);
+  const oldSubmeshes = state.currentModel.submeshes;
+  const oldEntries = state.meshEntries;
+  const oldToNew = new Map();
+  const survivors = [];
+  const survivorEntries = [];
+  const deletedNames = [];
+  for (const [oldIndex, part] of oldSubmeshes.entries()) {
+    if (deleteSet.has(oldIndex)) {
+      deletedNames.push(part.name);
+      continue;
+    }
+    oldToNew.set(oldIndex, survivors.length);
+    survivors.push(part);
+    survivorEntries.push(oldEntries[oldIndex]);
   }
-  for (const child of [...(deletedNode?.children || [])]) {
-    if (child !== state.meshEntries[deleteIndex]?.mesh) targetParentNode?.add(child);
+  const findSurvivingParent = (oldParentId) => {
+    let parentId = oldParentId;
+    while (parentId >= 0 && deleteSet.has(parentId)) {
+      parentId = oldSubmeshes[parentId]?.parentId ?? -1;
+    }
+    return parentId >= 0 ? (oldToNew.get(parentId) ?? -1) : -1;
+  };
+  for (const [oldIndex, part] of oldSubmeshes.entries()) {
+    if (deleteSet.has(oldIndex)) continue;
+    part.parentId = isTrackBinModel() ? -1 : findSurvivingParent(part.parentId);
   }
-
-  const entry = state.meshEntries[deleteIndex];
-  entry?.mesh.parent?.remove(entry.mesh);
-  if (entry?.mesh) disposeObject(entry.mesh);
-  deletedNode?.parent?.remove(deletedNode);
-
-  state.currentModel.submeshes.splice(deleteIndex, 1);
-  state.meshEntries.splice(deleteIndex, 1);
-  state.boneNodes.delete(deleted.name);
-  state.batchSelectedParts = new Set([...state.batchSelectedParts]
-    .filter((index) => index !== deleteIndex)
-    .map((index) => (index > deleteIndex ? index - 1 : index)));
-  if (highlightedIndex > deleteIndex) {
-    state.highlightedPartIndex = highlightedIndex - 1;
+  for (const deleteIndex of deleteIndices) {
+    const entry = oldEntries[deleteIndex];
+    const part = oldSubmeshes[deleteIndex];
+    const node = state.boneNodes.get(part.name);
+    entry?.mesh.parent?.remove(entry.mesh);
+    if (entry?.mesh) disposeObject(entry.mesh);
+    node?.parent?.remove(node);
+    state.boneNodes.delete(part.name);
   }
-  for (const part of state.currentModel.submeshes) {
-    if (part.parentId > deleteIndex) part.parentId--;
+  state.currentModel.submeshes = survivors;
+  state.meshEntries = survivorEntries;
+  for (const part of survivors) {
+    const node = state.boneNodes.get(part.name);
+    if (!node) continue;
+    const parentPart = part.parentId >= 0 ? state.currentModel.submeshes[part.parentId] : null;
+    (parentPart ? state.boneNodes.get(parentPart.name) : state.root)?.add(node);
   }
-
+  state.batchSelectedParts = new Set();
+  state.partSelectionAnchorIndex = -1;
+  state.highlightedPartIndex = -1;
   state.editIndex = -1;
   populateEditorForNoSelection();
   setEditorEnabled(false);
   rebuildSceneHelpers();
   updateModelDerivedData();
   populateSubmeshList(state.currentModel);
-  setStatus(t("deletedPart", { name: deleted.name }));
+  updateHighlightInfo();
+  updateBatchActionState();
+  setStatus(t("deletedPart", { name: deletedNames.join(", ") }));
 }
 
 async function replaceEditedPartFromFiles(files) {
@@ -4413,7 +4629,10 @@ async function replacePartWithModelFiles(partIndex, modelFile, files, options = 
   if (isTrackBinModel()) {
     normalizeTrackReplacementToPart(replacement, part, { keepSize: options.keepSize });
   } else {
-    normalizeReplacementToPart(replacement, part, { keepSize: options.keepSize });
+    normalizeReplacementToPart(replacement, part, {
+      keepSize: options.keepSize,
+      keepPosition: options.keepPosition
+    });
   }
 
   part.replacement = {
@@ -6579,6 +6798,7 @@ function updateStats(model, label) {
   el.statSubmeshes.textContent = model.submeshes.length.toLocaleString();
   el.statVertices.textContent = model.totalVertices.toLocaleString();
   el.statFaces.textContent = model.totalFaces.toLocaleString();
+  updatePartSelectionSummary();
 }
 
 function updateModelSelect() {
@@ -6653,6 +6873,7 @@ function clearModels() {
   el.batchEditPanel.hidden = true;
   setBatchEditToggleActive(false);
   el.submeshList.replaceChildren();
+  updatePartSelectionSummary(0);
   updateStatsEmpty();
   updateModelSelect();
   updateAnimationSelect();
@@ -8096,6 +8317,7 @@ async function refreshCurrentModelView() {
   const editIndex = state.editIndex;
   const highlightedIndex = state.highlightedPartIndex;
   const batchSelected = new Set(state.batchSelectedParts);
+  const partSelectionAnchorIndex = state.partSelectionAnchorIndex;
   state.restoringHistory = true;
   try {
     await showModel(model, model.name);
@@ -8103,6 +8325,7 @@ async function refreshCurrentModelView() {
     state.restoringHistory = false;
   }
   state.batchSelectedParts = new Set([...batchSelected].filter((index) => model.submeshes[index]));
+  state.partSelectionAnchorIndex = model.submeshes[partSelectionAnchorIndex] ? partSelectionAnchorIndex : -1;
   populateSubmeshList(model);
   if (highlightedIndex >= 0 && model.submeshes[highlightedIndex]) {
     setHighlightedPart(highlightedIndex);
@@ -8223,6 +8446,7 @@ function setPanelWidth(width) {
 
 function installCameraKeyboardControls() {
   window.addEventListener("keydown", (event) => {
+    updatePartModifierKeys(event);
     if (isTypingTarget(event.target)) return;
     const key = event.key.toLowerCase();
     if (["w", "a", "s", "d", "e", "q"].includes(key)) {
@@ -8234,7 +8458,12 @@ function installCameraKeyboardControls() {
     }
   });
   window.addEventListener("keyup", (event) => {
+    updatePartModifierKeys(event);
     state.cameraKeys.delete(event.key.toLowerCase());
+  });
+  window.addEventListener("blur", () => {
+    state.partMultiModifierDown = false;
+    state.partShiftModifierDown = false;
   });
 }
 
@@ -8242,9 +8471,19 @@ function isTypingTarget(target) {
   return target?.matches?.("input, textarea, select, [contenteditable='true']");
 }
 
+function updatePartModifierKeys(event) {
+  state.partMultiModifierDown = Boolean(event.metaKey || event.ctrlKey || event.getModifierState?.("Meta") || event.getModifierState?.("OS") || event.getModifierState?.("Control"));
+  state.partShiftModifierDown = Boolean(event.shiftKey || event.getModifierState?.("Shift"));
+}
+
 function installViewportPicking() {
   renderer.domElement.addEventListener("pointerdown", (event) => {
     pointerDown.set(event.clientX, event.clientY);
+    updatePartModifierKeys(event);
+    state.partPickModifiers = {
+      multi: isPartMultiSelectEvent(event),
+      shift: isPartRangeSelectEvent(event)
+    };
     if (event.button === 0) {
       event.preventDefault();
       state.cameraDragPointerId = event.pointerId;
@@ -8268,12 +8507,14 @@ function installViewportPicking() {
   });
   renderer.domElement.addEventListener("pointercancel", () => {
     state.cameraDragPointerId = null;
+    state.partPickModifiers = { multi: false, shift: false };
     if (state.cameraPointerLocked) document.exitPointerLock?.();
   });
   document.addEventListener("pointerlockchange", handleCameraPointerLockChange);
   document.addEventListener("mousemove", handleCameraPointerLockMove);
   document.addEventListener("mouseup", () => {
     state.cameraDragPointerId = null;
+    state.partPickModifiers = { multi: false, shift: false };
     if (state.cameraPointerLocked) document.exitPointerLock?.();
   });
 }
@@ -8309,7 +8550,10 @@ function rotateCameraByPointerMovement(movementX, movementY) {
 }
 
 function pickPartFromViewport(event) {
-  if (!state.currentModel || !state.meshEntries.length) return;
+  if (!state.currentModel || !state.meshEntries.length) {
+    state.partPickModifiers = { multi: false, shift: false };
+    return;
+  }
   const rect = renderer.domElement.getBoundingClientRect();
   pointerNdc.set(
     ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -8320,9 +8564,28 @@ function pickPartFromViewport(event) {
     .filter((entry) => entry?.mesh?.visible)
     .map((entry) => entry.mesh);
   const hit = raycaster.intersectObjects(meshes, false)[0];
-  if (!hit) return;
+  if (!hit) {
+    state.partPickModifiers = { multi: false, shift: false };
+    return;
+  }
   const index = state.meshEntries.findIndex((entry) => entry?.mesh === hit.object);
-  if (index >= 0) setHighlightedPart(index);
+  if (index >= 0) {
+    selectPartFromInteraction(index, {
+      ...event,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey || state.partPickModifiers.multi,
+      shiftKey: event.shiftKey || state.partPickModifiers.shift,
+      getModifierState: (key) => (
+        key === "Meta" ? (event.getModifierState?.("Meta") || state.partPickModifiers.multi) :
+          key === "OS" ? (event.getModifierState?.("OS") || state.partPickModifiers.multi) :
+          key === "Control" ? event.getModifierState?.("Control") :
+            key === "Shift" ? (event.getModifierState?.("Shift") || state.partPickModifiers.shift) :
+            event.getModifierState?.(key)
+      ),
+      preventDefault: () => event.preventDefault()
+    });
+  }
+  state.partPickModifiers = { multi: false, shift: false };
 }
 
 function installDropHandlers() {
@@ -9512,6 +9775,7 @@ function formatNumber(value) {
 
 function disposeCurrent() {
   restoreHighlightedMaterial();
+  clearSelectedPartHelpers();
   if (state.root) {
     scene.remove(state.root);
     disposeObject(state.root);
@@ -9528,6 +9792,7 @@ function disposeCurrent() {
   state.highlightedPartIndex = -1;
   state.highlightedMaterial = null;
   state.highlightedHelper = null;
+  state.partSelectionAnchorIndex = -1;
   state.meshNameLabels = [];
   el.meshNameOverlay.replaceChildren();
   el.meshNameOverlay.hidden = true;
